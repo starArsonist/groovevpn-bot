@@ -1,50 +1,51 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report:
+- Version change: 1.0.0 -> 1.0.1
+- Added sections: Updated Technology Stack (SQLite, SQLAlchemy, Docker, loguru) and Logging principle
+- Templates requiring updates: ✅ none pending
+-->
+# GrooveVPN Bot Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Clean Architecture (Hexagonal) Strictness
+Код должен быть организован в соответствии с принципами Clean Architecture с обязательным строгим разделением на слои. 
+- **Domain**: бизнес-сущности (пользователи, подписки, пакеты трафика). Не зависят от внешних библиотек и фреймворков.
+- **Use Cases**: бизнес-сценарии (покупка, продление, проверка лимита). Инкапсулируют бизнес-логику и взаимодействуют с доменом и интерфейсами адаптеров.
+- **Adapters (Primary & Secondary)**: реализация интерфейсов взаимодействия. Primary (Telegram-хэндлеры), Secondary (API Marzban, база данных, платежные системы).
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Dependency Injection (DI)
+Запрещается создавать экземпляры клиентов БД или API внутри Telegram-хэндлеров или бизнес-сценариев. Адаптеры (работа с БД, API-клиенты) должны прокидываться в Use Cases исключительно через Dependency Injection. Никаких хардкодных глобальных объектов.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Asynchronous I/O First
+Любое взаимодействие с I/O (база данных, API Marzban, Telegram API) должно быть асинхронным с использованием `async`/`await`. Использование блокирующих (синхронных) вызовов при наличии асинхронной альтернативы не допускается.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Строгая типизация
+Весь код на Python должен использовать строгую типизацию (type hints) без исключений для обеспечения надежности и самодокументируемости кода.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Подробное логирование
+Все ключевые действия пользователя (покупка, продление, изменения лимитов) и все ошибки должны подробно логироваться с контекстом для облегчения отладки и прозрачности операций. Для логирования используется библиотека `loguru`.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Technology Stack
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- **Язык**: Python 3.12+
+- **Управление зависимостями**: `uv`
+- **Telegram фреймворк**: `python-telegram-bot` (v20.x, asyncio)
+- **База данных**: SQLite (через SQLAlchemy для ORM)
+- **Контейнеризация**: Docker и Docker Compose
+- **Логирование**: `loguru`
+- **VPN интеграция**: REST API (Marzban)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Проектирование новых фич начинается с домена и Use Cases. Адаптеры подключаются в последнюю очередь.
+- Обязательно использование `uv` для работы с зависимостями.
+- Придерживаться стандартов оформления кода и строгой типизации при каждом PR.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Данный документ (Project Constitution) является основным сводом правил при разработке GrooveVPN Bot.
+- Все изменения в кодовой базе обязаны соответствовать изложенным принципам Clean Architecture и DI.
+- Изменения в архитектурном подходе или стеке технологий должны быть сначала отражены в этом документе (с инкрементом версии), и только после утверждения реализовываться в коде.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.1 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-07-31
