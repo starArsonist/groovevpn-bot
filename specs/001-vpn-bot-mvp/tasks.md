@@ -7,11 +7,11 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Initialize Python project with `uv` in `pyproject.toml`
-- [ ] T002 [P] Create configuration files in `docker-compose.yml` and `Dockerfile`
-- [ ] T003 [P] Configure `.env` parsing and configuration management in `src/config.py`
-- [ ] T004 [P] Setup `loguru` logging in `src/logger.py`
-- [ ] T005 Setup SQLite with SQLAlchemy (`async_sessionmaker`, base metadata) in `src/adapters/db/session.py`
+- [x] T001 Initialize Python project with `uv` in `pyproject.toml`
+- [x] T002 [P] Create configuration files in `docker-compose.yml` and `Dockerfile`
+- [x] T003 [P] Configure `.env` parsing and configuration management in `src/config.py`
+- [x] T004 [P] Setup `loguru` logging in `src/logger.py`
+- [x] T005 Setup SQLite with SQLAlchemy (`async_sessionmaker`, base metadata) in `src/adapters/db/session.py`
 
 ---
 
@@ -21,12 +21,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Create `Base` declarative class in `src/domain/base.py`
-- [ ] T007 [P] Create `User` model in `src/domain/models/user.py`
-- [ ] T008 [P] Create `Order` model in `src/domain/models/order.py`
-- [ ] T009 [P] Create `VPNProfile` model in `src/domain/models/vpn_profile.py`
-- [ ] T010 Implement Repository Pattern (`UserRepository`, `OrderRepository`, `VPNProfileRepository`) in `src/adapters/db/repositories.py`
-- [ ] T011 Implement `MarzbanClient` (OAuth2 auth with caching) in `src/adapters/marzban/client.py`
+- [x] T006 Create `Base` declarative class in `src/domain/base.py`
+- [x] T007 [P] Create `User` model in `src/domain/models/user.py`
+- [x] T008 [P] Create `Order` model in `src/domain/models/order.py`
+- [x] T009 [P] Create `VPNProfile` model in `src/domain/models/vpn_profile.py`
+- [x] T010 Implement Repository Pattern (`UserRepository`, `OrderRepository`, `VPNProfileRepository`) in `src/adapters/db/repositories.py`
+- [x] T011 Implement `MarzbanClient` (OAuth2 auth with caching) in `src/adapters/marzban/client.py`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -40,11 +40,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Create `CreateOrderUseCase` in `src/use_cases/order_use_cases.py`
-- [ ] T013 [P] [US1] Implement `/start` command handler and main menu in `src/adapters/tg_bot/handlers/start.py`
-- [ ] T014 [US1] Implement tariff selection keyboard and handler in `src/adapters/tg_bot/handlers/tariffs.py`
-- [ ] T015 [US1] Implement `ConversationHandler` (FSM) to wait for and handle receipt photo in `src/adapters/tg_bot/handlers/payment.py`
-- [ ] T016 [US1] Forward receipt photo to admin and create inline buttons "Approve"/"Reject" in `src/adapters/tg_bot/handlers/payment.py`
+- [x] T012 [P] [US1] Create `CreateOrderUseCase` in `src/use_cases/order_use_cases.py`
+- [x] T013 [P] [US1] Implement `/start` command handler and main menu in `src/adapters/tg_bot/handlers/start.py`
+- [x] T014 [US1] Implement tariff selection keyboard and handler in `src/adapters/tg_bot/handlers/tariffs.py`
+- [x] T015 [US1] Implement `ConversationHandler` (FSM) to wait for and handle receipt photo in `src/adapters/tg_bot/handlers/payment.py`
+- [x] T016 [US1] Forward receipt photo to admin and create inline buttons "Approve"/"Reject" in `src/adapters/tg_bot/handlers/payment.py`
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -58,9 +58,9 @@
 
 ### Implementation for User Story 2 & 3
 
-- [ ] T017 [US2] Create `ApproveOrderUseCase` (orchestrates API, DB update, notification) in `src/use_cases/admin_use_cases.py`
-- [ ] T018 [US2] Implement admin callback query handler for "Approve"/"Reject" buttons in `src/adapters/tg_bot/handlers/admin.py`
-- [ ] T019 [US3] Implement logic to send `subscription_url` and instructions to client inside `ApproveOrderUseCase` in `src/use_cases/admin_use_cases.py`
+- [x] T017 [US2] Create `ApproveOrderUseCase` (orchestrates API, DB update, notification) in `src/use_cases/admin_use_cases.py`
+- [x] T018 [US2] Implement admin callback query handler for "Approve"/"Reject" buttons in `src/adapters/tg_bot/handlers/admin.py`
+- [x] T019 [US3] Implement logic to send `subscription_url` and instructions to client inside `ApproveOrderUseCase` in `src/use_cases/admin_use_cases.py`
 
 **Checkpoint**: At this point, User Stories 1, 2, AND 3 should work independently
 
@@ -74,8 +74,8 @@
 
 ### Implementation for User Story 4
 
-- [ ] T020 [US4] Create `CheckTrafficUseCase` calling Marzban API in `src/use_cases/traffic_use_cases.py`
-- [ ] T021 [US4] Implement "Моя подписка" handler in `src/adapters/tg_bot/handlers/subscription.py`
+- [x] T020 [US4] Create `CheckTrafficUseCase` calling Marzban API in `src/use_cases/traffic_use_cases.py`
+- [x] T021 [US4] Implement "Моя подписка" handler in `src/adapters/tg_bot/handlers/subscription.py`
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -85,9 +85,9 @@
 
 **Purpose**: Improvements that affect multiple user stories and wiring it all together
 
-- [ ] T022 Setup Dependency Injection in `bot_data` for DB sessions and `MarzbanClient` in `src/main.py`
-- [ ] T023 Register all handlers to the `Application` and implement startup/shutdown in `src/main.py`
-- [ ] T024 Write Alembic migrations setup in `alembic.ini` and `alembic/` (or rely on `Base.metadata.create_all`)
+- [x] T022 Setup Dependency Injection in `bot_data` for DB sessions and `MarzbanClient` in `src/main.py`
+- [x] T023 Register all handlers to the `Application` and implement startup/shutdown in `src/main.py`
+- [x] T024 Write Alembic migrations setup in `alembic.ini` and `alembic/` (or rely on `Base.metadata.create_all`)
 
 ---
 
