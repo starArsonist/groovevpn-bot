@@ -104,3 +104,14 @@
 
 - Models creation (T007, T008, T009) can be done in parallel.
 - Basic bot handlers (T013) can be worked on in parallel with Use Cases (T012).
+
+---
+
+## Phase 7: Refactoring & Enhancements (v1.1)
+
+**Purpose**: Implement post-MVP requirements (username generation, dynamic inbounds, top-up flow).
+
+- [x] T025 Update `Order` model in `src/domain/models/order.py` to include `order_type` column (String: "new" or "topup").
+- [x] T026 [P] Update `MarzbanClient` in `src/adapters/marzban/client.py` to include `get_inbounds()` and `update_user()` methods, and modify `create_user()` to use dynamic inbounds.
+- [x] T027 Update `CreateOrderUseCase` in `src/use_cases/order_use_cases.py` to check `VPNProfileRepository` for existing profiles and set `order_type`. Update admin notification in `payment.py` to show order type.
+- [x] T028 Update `ApproveOrderUseCase` in `src/use_cases/admin_use_cases.py` to fetch inbounds before creation, and branch logic for 'topup' (GET current limit -> add -> PUT update limit).

@@ -55,8 +55,10 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
     
     # Notify Admin
+    order_type_str = "Продление (Top-up)" if order.order_type == "topup" else "Новая покупка"
     admin_text = (
         f"🆕 Новая заявка на покупку VPN\n"
+        f"Тип: {order_type_str}\n"
         f"Пользователь: @{user.username} (ID: {user.id})\n"
         f"Тариф: {tariff_gb} ГБ\n"
         f"Order ID: {order.id}"

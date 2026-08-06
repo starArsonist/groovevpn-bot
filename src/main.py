@@ -55,8 +55,8 @@ async def main():
     order_repo = OrderRepository(session)
     vpn_repo = VPNProfileRepository(session)
     
-    create_order_uc = CreateOrderUseCase(order_repo, user_repo)
-    admin_uc = AdminUseCases(order_repo, vpn_repo, marzban_client, application.bot)
+    create_order_uc = CreateOrderUseCase(order_repo, user_repo, vpn_repo)
+    admin_uc = AdminUseCases(order_repo, user_repo, vpn_repo, marzban_client, application.bot)
     traffic_uc = CheckTrafficUseCase(vpn_repo, marzban_client)
     
     application.bot_data["create_order_uc"] = create_order_uc

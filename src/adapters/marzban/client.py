@@ -46,16 +46,19 @@ class MarzbanClient:
             response.raise_for_status()
             return response.json()
 
-    async def create_user(self, username: str, data_limit: int) -> Dict[str, Any]:
+    async def create_user(self, username: str, data_limit: int, inbounds: Optional[Dict[str, list[str]]] = None) -> Dict[str, Any]:
         """Create a new VPN user in Marzban."""
         payload = {
             "username": username,
-            "proxies": {"vless": {}},
+            "proxies": {"vless": {"flow": "xtls-rprx-vision"}},
             "data_limit": data_limit,
             "expire": None,
             "data_limit_reset_strategy": "no_reset",
             "status": "active"
         }
+        if inbounds:
+            payload["inbounds"] = inbounds
+            
         logger.info(f"Creating Marzban user: {username}")
         return await self._request("POST", "/api/user", json=payload)
 
@@ -63,6 +66,19 @@ class MarzbanClient:
         """Get VPN user details from Marzban."""
         logger.info(f"Fetching Marzban user: {username}")
         return await self._request("GET", f"/api/user/{username}")
+
+    async def update_user(self, username: str, data_limit: int) -> Dict[str, Any]:
+        """Update existing VPN user in Marzban (top-up)."""
+        payload = {
+            "data_limit": data_limit
+        }
+        logger.info(f"Updating Marzban user {username} with new data limit: {data_limit}")
+        return await self._request("PUT", f"/api/user/{username}", json=payload)
+
+    async def get_inbounds(self) -> Dict[str, Any]:
+        """Get all available inbounds from Marzban."""
+        logger.info("Fetching inbounds from Marzban")
+        return await self._request("GET", "/api/inbounds")
 
 marzban_client = MarzbanClient(
     base_url=settings.marzban_api_url,

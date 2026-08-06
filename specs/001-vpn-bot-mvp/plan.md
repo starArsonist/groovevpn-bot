@@ -7,6 +7,19 @@
 
 Разработка MVP Telegram-бота для продажи резидентского VPN (трафик-пакеты). Реализуется на Python с использованием Clean Architecture, SQLite (SQLAlchemy) и интеграцией с Marzban REST API для управления VPN-пользователями. Оплата подтверждается вручную администратором по скриншотам чеков.
 
+## 3. Business Logic (Use Cases):
+- `CreateOrderUseCase`: Обработка создания заказа (сохранение в БД). Должен определять, является ли заказ первой покупкой (поиск по `VPNProfile`) или продлением. В зависимости от этого ставить маркер `order_type`.
+- `ApproveOrderUseCase`: Если заказ на покупку: запрашивает Inbounds, генерирует username, делает POST `/api/user`, сохраняет `VPNProfile` в БД, и отправляет клиенту ссылку. Если заказ на продление: получает текущий лимит через GET `/api/user/{username}`, прибавляет купленный трафик, делает PUT `/api/user/{username}` с новым лимитом, и уведомляет клиента.
+- `CheckTrafficUseCase`: Получение `used_traffic` и расчет оставшегося лимита.
+
+## 2. Интеграция с Marzban API (Secondary Adapter):
+- Создать асинхронный HTTP-клиент (на базе aiohttp или httpx) с учетом спецификации из `marzban_openapi.json`.
+- Реализовать авторизацию OAuth2PasswordBearer через POST `/api/admin/token` с логином/паролем из `.env` и кэшированием токена в памяти.
+- Метод создания пользователя (POST `/api/user`). `username` должен генерироваться в формате `user_{telegram_id}_{order_id}`.
+- Метод получения Inbounds (GET `/api/inbounds`), извлекающий все протоколы и их `tag`, чтобы динамически формировать поле `inbounds` в payload при создании пользователя.
+- Метод обновления пользователя (PUT `/api/user/{username}`) для увеличения `data_limit` при продлении.
+- Метод проверки трафика (GET `/api/user/{username}`).
+
 ## Technical Context
 
 **Language/Version**: Python 3.12+
