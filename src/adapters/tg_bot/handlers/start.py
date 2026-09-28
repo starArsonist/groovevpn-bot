@@ -3,7 +3,10 @@ from telegram.ext import ContextTypes
 from loguru import logger
 from src.adapters.tg_bot.support import support_button
 
-WELCOME_TEXT = "<b>GrooveVPN</b>"
+WELCOME_TEXT = (
+    "🌐 <b>GrooveVPN</b>\n"
+    "<i>Стабильный интернет без блокировок</i>"
+)
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

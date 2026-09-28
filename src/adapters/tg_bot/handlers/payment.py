@@ -23,8 +23,8 @@ async def payment_details_handler(update: Update, context: ContextTypes.DEFAULT_
     context.user_data['selected_tariff'] = tariff_gb
 
     text = (
-        f"<b>{tariff.gb} ГБ — {tariff.price_rub} ₽</b>\n\n"
-        "Переведите сумму на карту:\n"
+        f"<b>{tariff.gb} ГБ - {tariff.price_rub} ₽</b>\n\n"
+        "Переведите сумму на карту Т-Банка:\n"
         f"<code>{CARD_NUMBER}</code>\n\n"
         "После перевода отправьте сюда скриншот чека для подтверждения оплаты."
     )

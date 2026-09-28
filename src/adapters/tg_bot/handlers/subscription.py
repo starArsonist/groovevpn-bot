@@ -24,7 +24,7 @@ def _progress_bar(used_gb: float, limit_gb: float) -> str:
 
 def _format_expire(expire_at: int | None) -> str:
     if not expire_at:
-        return "—"
+        return "-"
     expire_dt = datetime.fromtimestamp(expire_at, tz=timezone.utc)
     days_left = (expire_dt - datetime.now(timezone.utc)).days
     date_str = expire_dt.strftime("%d.%m.%Y")
@@ -79,7 +79,8 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
             )
             keyboard = [
                 [InlineKeyboardButton("Продлить / докупить", callback_data="buy_vpn")],
-                [InlineKeyboardButton("🔙 Назад", callback_data="start")]
+                [InlineKeyboardButton("🔙 Назад", callback_data="start")],
+                [support_button()],
             ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)

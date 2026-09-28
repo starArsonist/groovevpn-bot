@@ -11,7 +11,7 @@ async def tariffs_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(f"User {update.effective_user.id} requested tariffs")
 
     keyboard = [
-        [InlineKeyboardButton(f"{tariff.gb} ГБ — {tariff.price_rub} ₽", callback_data=f"tariff_{tariff.gb}")]
+        [InlineKeyboardButton(f"{tariff.gb} ГБ - {tariff.price_rub} ₽", callback_data=f"tariff_{tariff.gb}")]
         for tariff in TARIFFS
     ]
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="start")])
@@ -20,7 +20,7 @@ async def tariffs_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = (
         "<b>Выберите пакет трафика</b>\n\n"
         "Пакет действует 30 дней с момента активации.\n"
-        "Если купить новый пакет до окончания текущего срока — остаток "
+        "Если купить новый пакет до окончания текущего срока - остаток "
         "трафика перенесётся в новый пакет, а срок действия отсчитается "
         "заново: 30 дней с момента покупки."
     )
