@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from loguru import logger
 from src.use_cases.traffic_use_cases import CheckTrafficUseCase
+from src.adapters.tg_bot.support import support_button
 
 STATUS_LABELS = {
     "active": "🟢 Активна",
@@ -46,12 +47,13 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
 
         if not data:
             text = (
-                "😕 У вас нет активной подписки VPN.\n"
+                "У вас нет активной подписки VPN.\n"
                 "Чтобы приобрести доступ, нажмите «Купить VPN»."
             )
             keyboard = [
-                [InlineKeyboardButton("🛒 Купить VPN", callback_data="buy_vpn")],
-                [InlineKeyboardButton("🔙 Назад", callback_data="start")]
+                [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")],
+                [InlineKeyboardButton("🔙 Назад", callback_data="start")],
+                [support_button()],
             ]
         else:
             status_label = STATUS_LABELS.get(data["status"], data["status"])
@@ -68,15 +70,15 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
                 )
 
             text = (
-                "📊 <b>Ваша подписка</b>\n"
+                "<b>Ваша подписка</b>\n"
                 f"Статус: {status_label}\n\n"
                 f"{usage_block}"
                 f"Действует до:  <b>{_format_expire(data['expire_at'])}</b>\n\n"
-                "🔗 Ваша ссылка для подключения:\n"
+                "Ссылка для подключения:\n"
                 f"<code>{data['sub_url']}</code>"
             )
             keyboard = [
-                [InlineKeyboardButton("🛒 Продлить / докупить", callback_data="buy_vpn")],
+                [InlineKeyboardButton("Продлить / докупить", callback_data="buy_vpn")],
                 [InlineKeyboardButton("🔙 Назад", callback_data="start")]
             ]
 
@@ -85,8 +87,11 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
 
     except Exception as e:
         logger.error(f"Failed to fetch subscription for {user_id}: {e}")
-        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="start")]]
+        keyboard = [
+            [InlineKeyboardButton("🔙 Назад", callback_data="start")],
+            [support_button()],
+        ]
         await query.message.edit_text(
-            "⚠️ Произошла ошибка при получении данных о подписке. Пожалуйста, попробуйте позже.",
+            "Произошла ошибка при получении данных о подписке. Попробуйте позже.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )

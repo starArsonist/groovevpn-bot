@@ -1,23 +1,18 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from loguru import logger
+from src.adapters.tg_bot.support import support_button
 
-WELCOME_TEXT = (
-    "🌐 <b>GrooveVPN</b>\n"
-    "<i>Стабильный интернет без блокировок</i>\n\n"
-    "🚀 Высокая скорость, без просадок\n"
-    "🔒 Приватность — логи активности не ведутся\n"
-    "🛰️ Резидентские IP — не палится сервисами\n\n"
-    "Выберите действие:"
-)
+WELCOME_TEXT = "<b>GrooveVPN</b>"
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f"User {update.effective_user.id} started the bot")
 
     keyboard = [
-        [InlineKeyboardButton("🛒 Купить VPN", callback_data="buy_vpn")],
-        [InlineKeyboardButton("📊 Моя подписка", callback_data="my_subscription")]
+        [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")],
+        [InlineKeyboardButton("Моя подписка", callback_data="my_subscription")],
+        [support_button()],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 

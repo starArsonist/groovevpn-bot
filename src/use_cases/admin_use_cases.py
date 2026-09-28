@@ -2,10 +2,12 @@ import asyncio
 import html
 from datetime import datetime, timedelta, timezone
 import httpx
+from telegram import InlineKeyboardMarkup
 from telegram.ext import ExtBot
 from loguru import logger
 from src.adapters.db.repositories import OrderRepository, VPNProfileRepository, UserRepository
 from src.adapters.marzban.client import MarzbanClient
+from src.adapters.tg_bot.support import support_button
 from src.domain.models import Order, User, VPNProfile
 from src.domain.traffic_carryover import (
     RENEWAL_WINDOW_DAYS,
@@ -157,14 +159,14 @@ class AdminUseCases:
         expire_str = self._format_expire(expire_at)
         success_msg = (
             "✅ <b>Оплата подтверждена!</b>\n\n"
-            "🔗 Ваша ссылка (ключ) для подключения:\n"
+            "Ваша ссылка (ключ) для подключения:\n"
             f"<code>{html.escape(sub_url)}</code>\n\n"
             f"Действует до: <b>{expire_str}</b>\n\n"
-            "📲 Как добавить в приложение Happ:\n"
-            "1️⃣ Скопируйте ссылку подписки\n"
-            "2️⃣ Откройте приложение Happ\n"
-            "3️⃣ Нажмите на «+»\n"
-            "4️⃣ Вставьте из буфера обмена"
+            "Как добавить в приложение Happ:\n"
+            "1. Скопируйте ссылку подписки\n"
+            "2. Откройте приложение Happ\n"
+            "3. Нажмите на «+»\n"
+            "4. Вставьте из буфера обмена"
         )
         await self.bot.send_message(chat_id=user.id, text=success_msg, parse_mode="HTML")
 
@@ -187,7 +189,7 @@ class AdminUseCases:
             f"Ваш тариф продлён на {order.tariff_gb} ГБ.\n"
             f"{traffic_line}"
             f"Действует до: <b>{expire_str}</b>\n"
-            "Приятного пользования! 🚀"
+            "Приятного пользования!"
         )
 
     @staticmethod
@@ -208,7 +210,12 @@ class AdminUseCases:
             "Если произошла ошибка, пожалуйста, попробуйте ещё раз или свяжитесь с поддержкой."
         )
         try:
-            await self.bot.send_message(chat_id=order.user_id, text=reject_msg, parse_mode="HTML")
+            await self.bot.send_message(
+                chat_id=order.user_id,
+                text=reject_msg,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[support_button()]]),
+            )
         except Exception as e:
             logger.error(f"Failed to send reject message to {order.user_id}: {e}")
 

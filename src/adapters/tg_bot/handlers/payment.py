@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes, ConversationHandler, CallbackQueryHandler
 from loguru import logger
 from src.use_cases.order_use_cases import CreateOrderUseCase
 from src.domain.tariffs import get_tariff
+from src.adapters.tg_bot.support import support_button
 
 WAITING_FOR_RECEIPT = 1
 
@@ -22,15 +23,14 @@ async def payment_details_handler(update: Update, context: ContextTypes.DEFAULT_
     context.user_data['selected_tariff'] = tariff_gb
 
     text = (
-        f"🧾 <b>Заказ: {tariff.gb} ГБ</b>\n\n"
-        f"Сумма к оплате: <b>{tariff.price_rub} ₽</b>\n\n"
-        "💳 Переведите сумму на карту:\n"
+        f"<b>{tariff.gb} ГБ — {tariff.price_rub} ₽</b>\n\n"
+        "Переведите сумму на карту:\n"
         f"<code>{CARD_NUMBER}</code>\n\n"
-        "После перевода отправьте сюда <b>скриншот чека</b> — и мы подтвердим оплату."
+        "После перевода отправьте сюда скриншот чека для подтверждения оплаты."
     )
 
     keyboard = [
-        [InlineKeyboardButton("🚫 Отмена", callback_data="cancel_payment")]
+        [InlineKeyboardButton("Отмена", callback_data="cancel_payment")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -57,14 +57,14 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
     # Notify Admin
-    order_type_label = "🔁 Продление (перенос остатка)" if order.order_type == "topup" else "🆕 Новая покупка"
+    order_type_label = "Продление (перенос остатка)" if order.order_type == "topup" else "Новая покупка"
     client_display = f"@{html.escape(user.username)}" if user.username else f"ID {user.id}"
     admin_text = (
-        f"{order_type_label}\n"
-        "━━━━━━━━━━━━━━\n"
-        f"👤 Клиент: {client_display} (ID: <code>{user.id}</code>)\n"
-        f"📦 Пакет: <b>{tariff_gb} ГБ</b>\n"
-        f"🆔 Заявка: <code>#{order.id}</code>"
+        f"<b>{order_type_label}</b>\n"
+        "────────────\n"
+        f"Клиент: {client_display} (ID: <code>{user.id}</code>)\n"
+        f"Пакет: <b>{tariff_gb} ГБ</b>\n"
+        f"Заявка: <code>#{order.id}</code>"
     )
 
     admin_keyboard = [
@@ -85,7 +85,8 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Notify User
     await update.message.reply_text(
-        "✅ Заявка принята! Ждём подтверждения от администратора — обычно это занимает пару минут."
+        "Заявка принята. Ждём подтверждения от администратора.",
+        reply_markup=InlineKeyboardMarkup([[support_button()]]),
     )
 
     # Clear user data
@@ -99,12 +100,12 @@ async def cancel_payment_handler(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data.pop('selected_tariff', None)
 
     keyboard = [
-        [InlineKeyboardButton("🛒 Купить VPN", callback_data="buy_vpn")],
-        [InlineKeyboardButton("📊 Моя подписка", callback_data="my_subscription")]
+        [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")],
+        [InlineKeyboardButton("Моя подписка", callback_data="my_subscription")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.message.edit_text("🚫 Оплата отменена.", reply_markup=reply_markup)
+    await query.message.edit_text("Оплата отменена.", reply_markup=reply_markup)
     return ConversationHandler.END
 
 payment_conv_handler = ConversationHandler(
