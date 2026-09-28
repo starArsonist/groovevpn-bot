@@ -1,4 +1,5 @@
 import asyncio
+import html
 from datetime import datetime, timedelta, timezone
 import httpx
 from telegram.ext import ExtBot
@@ -113,7 +114,7 @@ class AdminUseCases:
         await self.bot.send_message(
             chat_id=user.id,
             text=self._topup_success_message(order),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return True
 
@@ -155,17 +156,17 @@ class AdminUseCases:
         # Notify user
         expire_str = self._format_expire(expire_at)
         success_msg = (
-            "✅ Ваша оплата подтверждена!\n\n"
-            "Ваша ссылка (ключ) для подключения:\n"
-            f"`{sub_url}`\n\n"
-            f"Действует до: `{expire_str}`\n\n"
-            "Как добавить в приложение Happ:\n"
-            "1. Скопируйте ссылку подписки\n"
-            "2. Откройте приложение Happ\n"
-            "3. Нажмите на '+'\n"
-            "4. Вставить из буфера обмена"
+            "✅ <b>Оплата подтверждена!</b>\n\n"
+            "🔗 Ваша ссылка (ключ) для подключения:\n"
+            f"<code>{html.escape(sub_url)}</code>\n\n"
+            f"Действует до: <b>{expire_str}</b>\n\n"
+            "📲 Как добавить в приложение Happ:\n"
+            "1️⃣ Скопируйте ссылку подписки\n"
+            "2️⃣ Откройте приложение Happ\n"
+            "3️⃣ Нажмите на «+»\n"
+            "4️⃣ Вставьте из буфера обмена"
         )
-        await self.bot.send_message(chat_id=user.id, text=success_msg, parse_mode="Markdown")
+        await self.bot.send_message(chat_id=user.id, text=success_msg, parse_mode="HTML")
 
         return True
 
@@ -174,16 +175,19 @@ class AdminUseCases:
         if order.planned_data_limit is not None:
             carried_gb = round((order.carried_over_bytes or 0) / BYTES_PER_GB, 2)
             limit_gb = round(order.planned_data_limit / BYTES_PER_GB, 2)
-            traffic_line = f"Перенесено с предыдущего пакета: `{carried_gb} ГБ`\nНовый лимит: `{limit_gb} ГБ`\n"
+            traffic_line = (
+                f"Перенесено с предыдущего пакета: <b>{carried_gb} ГБ</b>\n"
+                f"Новый лимит: <b>{limit_gb} ГБ</b>\n"
+            )
         else:
-            traffic_line = "Лимит трафика: `безлимит`\n"
+            traffic_line = "Лимит трафика: <b>безлимит</b>\n"
 
         return (
-            "✅ Ваша оплата подтверждена!\n\n"
+            "✅ <b>Оплата подтверждена!</b>\n\n"
             f"Ваш тариф продлён на {order.tariff_gb} ГБ.\n"
             f"{traffic_line}"
-            f"Действует до: `{expire_str}`\n"
-            "Приятного пользования!"
+            f"Действует до: <b>{expire_str}</b>\n"
+            "Приятного пользования! 🚀"
         )
 
     @staticmethod
@@ -200,11 +204,11 @@ class AdminUseCases:
 
         # Notify user
         reject_msg = (
-            "❌ Ваша заявка на оплату была отклонена администратором.\n"
-            "Если произошла ошибка, пожалуйста, попробуйте еще раз или свяжитесь с поддержкой."
+            "❌ <b>Заявка отклонена администратором.</b>\n"
+            "Если произошла ошибка, пожалуйста, попробуйте ещё раз или свяжитесь с поддержкой."
         )
         try:
-            await self.bot.send_message(chat_id=order.user_id, text=reject_msg)
+            await self.bot.send_message(chat_id=order.user_id, text=reject_msg, parse_mode="HTML")
         except Exception as e:
             logger.error(f"Failed to send reject message to {order.user_id}: {e}")
 

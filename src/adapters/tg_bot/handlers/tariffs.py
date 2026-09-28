@@ -1,24 +1,29 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from loguru import logger
+from src.domain.tariffs import TARIFFS
+
 
 async def tariffs_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    
+
     logger.info(f"User {update.effective_user.id} requested tariffs")
-    
-    keyboard = [
-        [InlineKeyboardButton("50 ГБ - 130 руб", callback_data="tariff_50")],
-        [InlineKeyboardButton("150 ГБ - 250 руб", callback_data="tariff_150")],
-        [InlineKeyboardButton("450 ГБ - 449 руб", callback_data="tariff_450")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="start")]
-    ]
+
+    keyboard = []
+    for tariff in TARIFFS:
+        label = f"📦 {tariff.gb} ГБ — {tariff.price_rub} ₽"
+        if tariff.badge:
+            label += f"  {tariff.badge}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"tariff_{tariff.gb}")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="start")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     text = (
-        "Выберите подходящий пакет трафика:\n"
-        "(Трафик не сгорает со временем)"
+        "🛒 <b>Выберите пакет трафика</b>\n\n"
+        "Доступ действует 30 дней с момента активации.\n"
+        "Купите новый пакет заранее — остаток трафика не сгорит, "
+        "а перенесётся в новый пакет."
     )
-    
-    await query.message.edit_text(text, reply_markup=reply_markup)
+
+    await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
