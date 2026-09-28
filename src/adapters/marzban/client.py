@@ -46,19 +46,25 @@ class MarzbanClient:
             response.raise_for_status()
             return response.json()
 
-    async def create_user(self, username: str, data_limit: int, inbounds: Optional[Dict[str, list[str]]] = None) -> Dict[str, Any]:
+    async def create_user(
+        self,
+        username: str,
+        data_limit: int,
+        expire: Optional[int] = None,
+        inbounds: Optional[Dict[str, list[str]]] = None,
+    ) -> Dict[str, Any]:
         """Create a new VPN user in Marzban."""
         payload = {
             "username": username,
             "proxies": {"vless": {"flow": "xtls-rprx-vision"}},
             "data_limit": data_limit,
-            "expire": None,
+            "expire": expire,
             "data_limit_reset_strategy": "no_reset",
             "status": "active"
         }
         if inbounds:
             payload["inbounds"] = inbounds
-            
+
         logger.info(f"Creating Marzban user: {username}")
         return await self._request("POST", "/api/user", json=payload)
 
@@ -67,13 +73,28 @@ class MarzbanClient:
         logger.info(f"Fetching Marzban user: {username}")
         return await self._request("GET", f"/api/user/{username}")
 
-    async def update_user(self, username: str, data_limit: int) -> Dict[str, Any]:
-        """Update existing VPN user in Marzban (top-up)."""
-        payload = {
-            "data_limit": data_limit
-        }
-        logger.info(f"Updating Marzban user {username} with new data limit: {data_limit}")
+    async def update_user(
+        self,
+        username: str,
+        data_limit: Optional[int] = None,
+        expire: Optional[int] = None,
+        status: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update existing VPN user in Marzban (top-up / renewal)."""
+        payload: Dict[str, Any] = {}
+        if data_limit is not None:
+            payload["data_limit"] = data_limit
+        if expire is not None:
+            payload["expire"] = expire
+        if status is not None:
+            payload["status"] = status
+        logger.info(f"Updating Marzban user {username} with: {payload}")
         return await self._request("PUT", f"/api/user/{username}", json=payload)
+
+    async def reset_user_data_usage(self, username: str) -> Dict[str, Any]:
+        """Reset a user's used_traffic counter to zero."""
+        logger.info(f"Resetting data usage for Marzban user: {username}")
+        return await self._request("POST", f"/api/user/{username}/reset")
 
     async def get_inbounds(self) -> Dict[str, Any]:
         """Get all available inbounds from Marzban."""
