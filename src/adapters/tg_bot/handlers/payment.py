@@ -8,7 +8,7 @@ from src.adapters.tg_bot.support import support_button
 
 WAITING_FOR_RECEIPT = 1
 
-CARD_NUMBER = "2200 7008 5236 6417"
+CARD_NUMBER = "+7 960 992 33 29"
 
 
 async def payment_details_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -92,7 +92,7 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Notify User
     await update.message.reply_text(
-        "Заявка принята. Ждём подтверждения от администратора.",
+        "Заявка принята. Дождитесь подтверждения оплаты.",
         reply_markup=InlineKeyboardMarkup([[support_button()]]),
     )
 

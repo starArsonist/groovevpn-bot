@@ -47,7 +47,7 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
 
         if not data:
             text = (
-                "У вас нет активной подписки VPN.\n"
+                "У вас нет активной подписки.\n"
                 "Чтобы приобрести доступ, нажмите «Купить VPN»."
             )
             keyboard = [
