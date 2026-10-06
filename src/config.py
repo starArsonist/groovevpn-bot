@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     trial_days: int = 7
     trial_daily_cap: int = 50
 
+    connect_page_url: str = ""
+    connect_apps: str = "happ,v2raytun,hiddify"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

@@ -9,6 +9,7 @@ from src.adapters.db.repositories import OrderRepository, VPNProfileRepository, 
 from src.adapters.db.trial_repository import TrialRepository
 from src.adapters.marzban.client import MarzbanClient
 from src.adapters.marzban.inbounds import build_inbounds_payload
+from src.adapters.tg_bot.connect import CONNECT_HINT, ConnectKeyboard, send_with_fallback
 from src.adapters.tg_bot.support import support_button
 from src.domain.clock import utc_now
 from src.domain.models import Order, User, VPNProfile
@@ -23,13 +24,14 @@ BYTES_PER_GB = 1024 ** 3
 
 
 class AdminUseCases:
-    def __init__(self, order_repo: OrderRepository, user_repo: UserRepository, vpn_profile_repo: VPNProfileRepository, marzban_client: MarzbanClient, bot: ExtBot, trial_repo: TrialRepository | None = None):
+    def __init__(self, order_repo: OrderRepository, user_repo: UserRepository, vpn_profile_repo: VPNProfileRepository, marzban_client: MarzbanClient, bot: ExtBot, trial_repo: TrialRepository | None = None, connect_keyboard: ConnectKeyboard | None = None):
         self.order_repo = order_repo
         self.user_repo = user_repo
         self.vpn_profile_repo = vpn_profile_repo
         self.marzban_client = marzban_client
         self.bot = bot
         self.trial_repo = trial_repo
+        self.connect_keyboard = connect_keyboard
         # Бот работает в единственном процессе на общей сессии (см. main.py), поэтому
         # in-process лока по order_id достаточно, чтобы закрыть гонку при двойном
         # клике администратора/повторной доставке одного и того же callback-а.
@@ -167,21 +169,50 @@ class AdminUseCases:
         await self.order_repo.update(order.id, status="completed")
 
         # Notify user
-        expire_str = self._format_expire(expire_at)
-        success_msg = (
-            "✅ <b>Оплата подтверждена!</b>\n\n"
-            "Ваша ссылка (ключ) для подключения:\n"
-            f"<code>{html.escape(sub_url)}</code>\n\n"
-            f"Действует до: <b>{expire_str}</b>\n\n"
-            "Как добавить в приложение Happ:\n"
-            "1. Скопируйте ссылку подписки\n"
-            "2. Откройте приложение Happ\n"
-            "3. Нажмите на «+»\n"
-            "4. Вставьте из буфера обмена"
-        )
-        await self.bot.send_message(chat_id=user.id, text=success_msg, parse_mode="HTML")
+        await self._notify_first_issue(user.id, sub_url, self._format_expire(expire_at))
 
         return True
+
+    async def _notify_first_issue(self, user_id: int, sub_url: str, expire_str: str) -> None:
+        """Сообщение с первой выдачей ссылки. Кнопки подключения - только здесь (не при продлении)."""
+
+        def build_text(with_buttons: bool) -> str:
+            instructions = (
+                CONNECT_HINT
+                if with_buttons
+                else (
+                    "Как добавить в приложение Happ:\n"
+                    "1. Скопируйте ссылку подписки\n"
+                    "2. Откройте приложение Happ\n"
+                    "3. Нажмите на «+»\n"
+                    "4. Вставьте из буфера обмена"
+                )
+            )
+            return (
+                "✅ <b>Оплата подтверждена!</b>\n\n"
+                "Ваша ссылка (ключ) для подключения:\n"
+                f"<code>{html.escape(sub_url)}</code>\n\n"
+                f"Действует до: <b>{expire_str}</b>\n\n"
+                f"{instructions}"
+            )
+
+        async def deliver(text: str, markup: InlineKeyboardMarkup | None) -> None:
+            if markup is None:
+                await self.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+            else:
+                await self.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=markup)
+
+        connect_rows = self.connect_keyboard.app_rows(sub_url, "first_purchase") if self.connect_keyboard else []
+        plain = (build_text(with_buttons=False), None)
+        if not connect_rows:
+            await deliver(*plain)
+            return
+
+        with_buttons = (
+            build_text(with_buttons=True),
+            InlineKeyboardMarkup([*connect_rows, [support_button()]]),
+        )
+        await send_with_fallback(deliver, with_buttons, plain)
 
     def _topup_success_message(self, order: Order) -> str:
         expire_str = self._format_expire(order.planned_expire_at)
