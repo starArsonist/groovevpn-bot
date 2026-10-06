@@ -58,6 +58,13 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Notify Admin
     order_type_label = "Продление (перенос остатка)" if order.order_type == "topup" else "Новая покупка"
+    trial_repo = context.bot_data.get("trial_repo")
+    if order.order_type == "topup" and trial_repo is not None:
+        try:
+            if await trial_repo.has_unconverted(user.id):
+                order_type_label = "Покупка после пробного периода (остаток триала не переносится)"
+        except Exception as exc:
+            logger.error(f"Failed to check trial state for order {order.id}: {exc}")
     client_display = f"@{html.escape(user.username)}" if user.username else f"ID {user.id}"
     admin_text = (
         f"<b>{order_type_label}</b>\n"

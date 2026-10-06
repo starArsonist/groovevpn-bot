@@ -6,9 +6,13 @@ from telegram import InlineKeyboardMarkup
 from telegram.ext import ExtBot
 from loguru import logger
 from src.adapters.db.repositories import OrderRepository, VPNProfileRepository, UserRepository
+from src.adapters.db.trial_repository import TrialRepository
 from src.adapters.marzban.client import MarzbanClient
+from src.adapters.marzban.inbounds import build_inbounds_payload
 from src.adapters.tg_bot.support import support_button
+from src.domain.clock import utc_now
 from src.domain.models import Order, User, VPNProfile
+from src.domain.trial_rules import build_trial_conversion_plan
 from src.domain.traffic_carryover import (
     RENEWAL_WINDOW_DAYS,
     calculate_renewal_plan,
@@ -19,12 +23,13 @@ BYTES_PER_GB = 1024 ** 3
 
 
 class AdminUseCases:
-    def __init__(self, order_repo: OrderRepository, user_repo: UserRepository, vpn_profile_repo: VPNProfileRepository, marzban_client: MarzbanClient, bot: ExtBot):
+    def __init__(self, order_repo: OrderRepository, user_repo: UserRepository, vpn_profile_repo: VPNProfileRepository, marzban_client: MarzbanClient, bot: ExtBot, trial_repo: TrialRepository | None = None):
         self.order_repo = order_repo
         self.user_repo = user_repo
         self.vpn_profile_repo = vpn_profile_repo
         self.marzban_client = marzban_client
         self.bot = bot
+        self.trial_repo = trial_repo
         # Бот работает в единственном процессе на общей сессии (см. main.py), поэтому
         # in-process лока по order_id достаточно, чтобы закрыть гонку при двойном
         # клике администратора/повторной доставке одного и того же callback-а.
@@ -79,14 +84,24 @@ class AdminUseCases:
         # обработке (retry после сбоя, повторный вебхук) он берётся из БД, а не
         # пересчитывается заново по уже обнулённому used_traffic.
         if not order.plan_computed:
+            # get_user нужен и для триала: это проба существования пользователя в
+            # Marzban (при 404 сработает fallback на создание нового пользователя).
             marzban_user = await self.marzban_client.get_user(profile.marzban_username)
-            plan = calculate_renewal_plan(
-                current_status=marzban_user.get("status", "active"),
-                current_data_limit=marzban_user.get("data_limit"),
-                current_used_traffic=marzban_user.get("used_traffic", 0),
-                purchased_bytes=purchased_bytes,
-                purchase_time=purchase_time_now(),
-            )
+            if await self._is_unconverted_trial_user(user.id):
+                # Триал - не платный пакет: остаток не переносится, пользователь
+                # обновляется как при обычной покупке (reset, лимит = пакет, +30 дней).
+                plan = build_trial_conversion_plan(
+                    purchased_bytes=purchased_bytes,
+                    purchase_time=purchase_time_now(),
+                )
+            else:
+                plan = calculate_renewal_plan(
+                    current_status=marzban_user.get("status", "active"),
+                    current_data_limit=marzban_user.get("data_limit"),
+                    current_used_traffic=marzban_user.get("used_traffic", 0),
+                    purchased_bytes=purchased_bytes,
+                    purchase_time=purchase_time_now(),
+                )
             order = await self.order_repo.update(
                 order.id,
                 plan_computed=True,
@@ -111,6 +126,7 @@ class AdminUseCases:
             status="active",
         )
 
+        await self._mark_trial_converted(user.id)
         order = await self.order_repo.update(order.id, status="completed")
 
         await self.bot.send_message(
@@ -124,13 +140,7 @@ class AdminUseCases:
         marzban_username = f"user_{order.user_id}_{order.id}"
 
         # Fetch inbounds
-        inbounds_response = await self.marzban_client.get_inbounds()
-        inbounds_dict = {}
-        for protocol, items in inbounds_response.items():
-            if isinstance(items, list):
-                tags = [item["tag"] for item in items if isinstance(item, dict) and "tag" in item]
-                if tags:
-                    inbounds_dict[protocol] = tags
+        inbounds_dict = build_inbounds_payload(await self.marzban_client.get_inbounds())
 
         expire_at = int((purchase_time_now() + timedelta(days=RENEWAL_WINDOW_DAYS)).timestamp())
 
@@ -153,6 +163,7 @@ class AdminUseCases:
         )
 
         # Update order status
+        await self._mark_trial_converted(user.id)
         await self.order_repo.update(order.id, status="completed")
 
         # Notify user
@@ -177,10 +188,8 @@ class AdminUseCases:
         if order.planned_data_limit is not None:
             carried_gb = round((order.carried_over_bytes or 0) / BYTES_PER_GB, 2)
             limit_gb = round(order.planned_data_limit / BYTES_PER_GB, 2)
-            traffic_line = (
-                f"Перенесено с предыдущего пакета: <b>{carried_gb} ГБ</b>\n"
-                f"Новый лимит: <b>{limit_gb} ГБ</b>\n"
-            )
+            carried_line = f"Перенесено с предыдущего пакета: <b>{carried_gb} ГБ</b>\n" if carried_gb > 0 else ""
+            traffic_line = f"{carried_line}Новый лимит: <b>{limit_gb} ГБ</b>\n"
         else:
             traffic_line = "Лимит трафика: <b>безлимит</b>\n"
 
@@ -191,6 +200,15 @@ class AdminUseCases:
             f"Действует до: <b>{expire_str}</b>\n"
             "Приятного пользования!"
         )
+
+    async def _is_unconverted_trial_user(self, user_id: int) -> bool:
+        return self.trial_repo is not None and await self.trial_repo.has_unconverted(user_id)
+
+    async def _mark_trial_converted(self, user_id: int) -> None:
+        if self.trial_repo is None:
+            return
+        if await self.trial_repo.mark_converted(user_id, utc_now()):
+            logger.info(f"Trial of user {user_id} converted to a paid package")
 
     @staticmethod
     def _format_expire(expire_at: int) -> str:

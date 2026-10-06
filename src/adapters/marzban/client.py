@@ -4,6 +4,9 @@ import httpx
 from src.config import settings
 from loguru import logger
 
+USERS_BATCH_SIZE = 50
+
+
 class MarzbanClient:
     def __init__(self, base_url: str, username: str, password: str):
         self.base_url = base_url.rstrip("/")
@@ -90,6 +93,18 @@ class MarzbanClient:
             payload["status"] = status
         logger.info(f"Updating Marzban user {username} with: {payload}")
         return await self._request("PUT", f"/api/user/{username}", json=payload)
+
+    async def get_users(self, usernames: list[str]) -> list[Dict[str, Any]]:
+        """Batch-запрос пользователей по списку имён (GET /api/users, порциями)."""
+        users: list[Dict[str, Any]] = []
+        for start in range(0, len(usernames), USERS_BATCH_SIZE):
+            chunk = usernames[start:start + USERS_BATCH_SIZE]
+            logger.info(f"Fetching {len(chunk)} Marzban users in one batch")
+            data = await self._request(
+                "GET", "/api/users", params={"username": chunk, "limit": len(chunk)}
+            )
+            users.extend(data.get("users", []))
+        return users
 
     async def reset_user_data_usage(self, username: str) -> Dict[str, Any]:
         """Reset a user's used_traffic counter to zero."""
