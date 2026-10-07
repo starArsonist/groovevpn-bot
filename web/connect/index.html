@@ -116,18 +116,11 @@
 <script>
 'use strict';
 
-// ===== Настройки (заполняются при деплое) =====
-// Хосты, чьи ссылки подписки страница вправе открывать, например ['sub.example.com'].
-// Пустой список = страница всем отказывает (защита от подстановки чужих подписок).
-const ALLOWED_SUB_HOSTS = [];
-// Имя профиля, под которым Hiddify сохранит подписку.
-const PROFILE_NAME = 'Groove';
-// Пауза перед автоматическим открытием приложения, мс.
+const ALLOWED_SUB_HOSTS = ['panel.groovevpn.online'];
+const PROFILE_NAME = 'groove dealers';
 const OPEN_DELAY_MS = 700;
 
 /* LOGIC:BEGIN */
-// Шаблоны схем приложений. Ссылки "Где скачать" - только официальные страницы
-// (у приложения без подтверждённой официальной страницы ссылки нет).
 const APPS = Object.freeze({
   happ: Object.freeze({
     title: 'Happ',
@@ -149,14 +142,12 @@ const APPS = Object.freeze({
 const ALLOWED_SCHEMES = ['happ://', 'v2raytun://', 'hiddify://'];
 const MAX_SUB_LENGTH = 2048;
 
-// Данные приходят во фрагменте (#app=...&sub=...): он не уходит на сервер.
 function parseFragment(hash) {
   const raw = typeof hash === 'string' && hash.charAt(0) === '#' ? hash.slice(1) : '';
   const params = new URLSearchParams(raw);
   return { app: params.get('app'), sub: params.get('sub') };
 }
 
-// Возвращает { ok: true, app, sub } или { ok: false } - без причины отказа.
 function validate(params, allowedHosts) {
   const fail = { ok: false };
   if (!params || typeof params.app !== 'string' || typeof params.sub !== 'string') return fail;
@@ -204,7 +195,6 @@ function resolve(hash, allowedHosts, profileName) {
 }
 /* LOGIC:END */
 
-// ===== Работа со страницей (данные из фрагмента выводятся только через textContent) =====
 function fallbackCopy(text) {
   const area = document.createElement('textarea');
   area.value = text;
