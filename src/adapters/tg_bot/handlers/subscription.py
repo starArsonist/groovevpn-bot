@@ -1,8 +1,10 @@
+import html
 from datetime import datetime, timezone
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from loguru import logger
 from src.use_cases.traffic_use_cases import CheckTrafficUseCase
+from src.adapters.tg_bot.connect import send_with_fallback
 from src.adapters.tg_bot.support import support_button
 
 STATUS_LABELS = {
@@ -44,6 +46,7 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
 
     try:
         data = await traffic_uc.execute(user_id)
+        connect_rows: list[list[InlineKeyboardButton]] = []
 
         if not data:
             text = (
@@ -75,16 +78,27 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
                 f"{usage_block}"
                 f"Действует до:  <b>{_format_expire(data['expire_at'])}</b>\n\n"
                 "Ссылка для подключения:\n"
-                f"<code>{data['sub_url']}</code>"
+                f"<code>{html.escape(data['sub_url'] or '')}</code>"
             )
+            connect_keyboard = context.bot_data.get("connect_keyboard")
+            connect_rows = connect_keyboard.app_rows(data["sub_url"], "subscription") if connect_keyboard else []
             keyboard = [
                 [InlineKeyboardButton("Продлить / докупить", callback_data="buy_vpn")],
                 [InlineKeyboardButton("🔙 Назад", callback_data="start")],
                 [support_button()],
             ]
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+        async def deliver(message_text: str, markup: InlineKeyboardMarkup | None) -> None:
+            await query.message.edit_text(message_text, reply_markup=markup, parse_mode="HTML")
+
+        if connect_rows:
+            await send_with_fallback(
+                deliver,
+                (text, InlineKeyboardMarkup([*connect_rows, *keyboard])),
+                (text, InlineKeyboardMarkup(keyboard)),
+            )
+        else:
+            await deliver(text, InlineKeyboardMarkup(keyboard))
 
     except Exception as e:
         logger.error(f"Failed to fetch subscription for {user_id}: {e}")

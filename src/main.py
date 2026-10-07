@@ -26,6 +26,7 @@ from src.adapters.tg_bot.handlers.admin import admin_decision_handler
 from src.adapters.tg_bot.handlers.subscription import my_subscription_handler
 from src.adapters.tg_bot.handlers.trial import trial_start_handler, TRIAL_CALLBACK
 from src.adapters.tg_bot.notifier import TelegramTrialNotifier
+from src.adapters.tg_bot.connect import build_connect_keyboard
 
 TRIAL_CHECK_INTERVAL_SECONDS = 300
 
@@ -80,14 +81,22 @@ async def main():
         trial_repo, marzban_client, TelegramTrialNotifier(application.bot)
     )
 
+    # Кнопки подключения в один тап (страница-прослойка); при пустой/невалидной
+    # конфигурации выключены, бот работает как раньше
+    connect_keyboard = build_connect_keyboard(settings.connect_page_url, settings.connect_apps)
+
     create_order_uc = CreateOrderUseCase(order_repo, user_repo, vpn_repo)
-    admin_uc = AdminUseCases(order_repo, user_repo, vpn_repo, marzban_client, application.bot, trial_repo=trial_repo)
+    admin_uc = AdminUseCases(
+        order_repo, user_repo, vpn_repo, marzban_client, application.bot,
+        trial_repo=trial_repo, connect_keyboard=connect_keyboard,
+    )
     traffic_uc = CheckTrafficUseCase(vpn_repo, marzban_client)
     
     application.bot_data["create_order_uc"] = create_order_uc
     application.bot_data["admin_uc"] = admin_uc
     application.bot_data["traffic_uc"] = traffic_uc
     application.bot_data["trial_repo"] = trial_repo
+    application.bot_data["connect_keyboard"] = connect_keyboard
     application.bot_data["activate_trial_uc"] = activate_trial_uc
     application.bot_data["trial_offer_uc"] = trial_offer_uc
 

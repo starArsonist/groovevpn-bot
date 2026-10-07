@@ -43,6 +43,7 @@ class FakeMarzban:
         self.calls: list[tuple] = []
         self.fail: dict[str, int] = {}
         self.delay = delay
+        self.sub_url: str | None = None  # переопределить ссылку подписки новых пользователей
 
     def count(self, method: str) -> int:
         return sum(1 for call in self.calls if call[0] == method)
@@ -89,7 +90,7 @@ class FakeMarzban:
             "data_limit": data_limit,
             "used_traffic": 0,
             "expire": expire,
-            "subscription_url": f"https://sub.test/{username}",
+            "subscription_url": self.sub_url or f"https://sub.test/{username}",
         }
         return dict(self.users[username])
 
@@ -143,11 +144,20 @@ class FakeNotifier:
 
 
 class FakeBot:
-    def __init__(self) -> None:
+    """Фейковый Telegram-бот: помнит сообщения и клавиатуры, умеет "отклонить" клавиатуру."""
+
+    def __init__(self, reject_if: Any = None) -> None:
         self.messages: list[tuple[int, str]] = []
+        self.calls: list[dict[str, Any]] = []
+        self.reject_if = reject_if  # callable(reply_markup) -> bool: Telegram отклоняет такую клавиатуру
 
     async def send_message(self, chat_id: int, text: str, parse_mode: str | None = None, reply_markup: Any = None) -> None:
+        if reply_markup is not None and self.reject_if is not None and self.reject_if(reply_markup):
+            from telegram.error import BadRequest
+
+            raise BadRequest("Button_url_invalid")
         self.messages.append((chat_id, text))
+        self.calls.append({"chat_id": chat_id, "text": text, "reply_markup": reply_markup})
 
 
 def make_config(enabled: bool = True, data_gb: int = 10, days: int = 7, daily_cap: int = 50) -> TrialConfig:

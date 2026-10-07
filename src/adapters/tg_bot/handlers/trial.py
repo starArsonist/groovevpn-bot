@@ -4,6 +4,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from loguru import logger
 
+from src.adapters.tg_bot.connect import CONNECT_HINT, send_with_fallback
 from src.adapters.tg_bot.support import support_button
 from src.use_cases.trial_use_cases import (
     ActivateTrialUseCase,
@@ -36,7 +37,11 @@ def _format_gb(value: float | None) -> str:
     return str(int(value)) if float(value).is_integer() else str(round(value, 2))
 
 
-def render_trial_result(result: TrialActivationResult) -> tuple[str, InlineKeyboardMarkup]:
+def render_trial_result(
+    result: TrialActivationResult,
+    connect_rows: list[list[InlineKeyboardButton]] | None = None,
+) -> tuple[str, InlineKeyboardMarkup]:
+    connect_rows = connect_rows or []
     buy_row = [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")]
     subscription_row = [InlineKeyboardButton("Моя подписка", callback_data="my_subscription")]
     back_row = [InlineKeyboardButton("🔙 Назад", callback_data="start")]
@@ -47,9 +52,9 @@ def render_trial_result(result: TrialActivationResult) -> tuple[str, InlineKeybo
             f"Доступно: <b>{_format_gb(result.data_gb)} ГБ</b>, действует до <b>{_format_date(result.expires_at)}</b>\n\n"
             "Ваша ссылка (ключ) для подключения:\n"
             f"<code>{html.escape(result.sub_url or '')}</code>\n\n"
-            f"{HAPP_HOWTO}"
+            f"{CONNECT_HINT if connect_rows else HAPP_HOWTO}"
         )
-        return text, InlineKeyboardMarkup([subscription_row, buy_row, [support_button()]])
+        return text, InlineKeyboardMarkup([*connect_rows, subscription_row, buy_row, [support_button()]])
 
     if result.kind == TrialResultKind.ALREADY_ACTIVE:
         text = (
@@ -58,7 +63,7 @@ def render_trial_result(result: TrialActivationResult) -> tuple[str, InlineKeybo
             "Ваша ссылка (ключ) для подключения:\n"
             f"<code>{html.escape(result.sub_url or '')}</code>"
         )
-        return text, InlineKeyboardMarkup([subscription_row, buy_row, [support_button()]])
+        return text, InlineKeyboardMarkup([*connect_rows, subscription_row, buy_row, [support_button()]])
 
     if result.kind == TrialResultKind.ALREADY_USED:
         text = "Пробный период уже был использован. Вы можете выбрать пакет:"
@@ -87,5 +92,16 @@ async def trial_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Unexpected trial failure for {user.id}: {exc}")
         result = TrialActivationResult(TrialResultKind.ERROR)
 
-    text, markup = render_trial_result(result)
-    await query.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    connect_keyboard = context.bot_data.get("connect_keyboard")
+    connect_rows: list[list[InlineKeyboardButton]] = []
+    if connect_keyboard is not None and result.kind in (TrialResultKind.GRANTED, TrialResultKind.ALREADY_ACTIVE):
+        connect_rows = connect_keyboard.app_rows(result.sub_url, "trial")
+
+    async def deliver(text: str, markup: InlineKeyboardMarkup | None) -> None:
+        await query.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+
+    await send_with_fallback(
+        deliver,
+        render_trial_result(result, connect_rows),
+        render_trial_result(result),
+    )
