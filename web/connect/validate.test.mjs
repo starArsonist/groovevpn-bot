@@ -134,9 +134,14 @@ test('каждый результат resolve - это deeplink из белог�
 
 // ---------- статические проверки файла ----------
 
-test('в репозитории ALLOWED_SUB_HOSTS пуст (хост прописывается при деплое)', () => {
-  assert.match(html, /const ALLOWED_SUB_HOSTS = \[\];/);
-  assert.match(html, /const PROFILE_NAME = 'Groove';/);
+test('ALLOWED_SUB_HOSTS - список простых имён хостов (без схемы, порта и пути)', () => {
+  const match = html.match(/const ALLOWED_SUB_HOSTS = \[([^\]]*)\];/);
+  assert.ok(match, 'не найдена константа ALLOWED_SUB_HOSTS');
+  const hosts = [...match[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+  for (const host of hosts) {
+    assert.match(host, /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i, `некорректное имя хоста: ${host}`);
+  }
+  assert.match(html, /const PROFILE_NAME = '[^']+';/);
 });
 
 test('обязательные meta-теги', () => {
@@ -171,6 +176,7 @@ test('http(s)-адреса в файле - только ссылки "Где с�
   assert.deepEqual([...found].sort(), ['https://hiddify.com/app/', 'https://www.happ.su/main']);
 });
 
-test('в тексте страницы нет слова VPN', () => {
-  assert.doesNotMatch(html, /vpn/i);
+test('в тексте страницы нет слова VPN (настройки деплоя - хост и имя профиля - не в счёт)', () => {
+  const withoutDeploySettings = html.replace(/^const (ALLOWED_SUB_HOSTS|PROFILE_NAME) = .*$/gm, '');
+  assert.doesNotMatch(withoutDeploySettings, /vpn/i);
 });

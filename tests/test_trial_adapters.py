@@ -151,6 +151,8 @@ def _first_buttons(message) -> list[str]:
 
 
 class StaticOffer:
+    config = make_config()
+
     def __init__(self, value=True, error=False):
         self.value, self.error = value, error
 
