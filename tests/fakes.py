@@ -84,6 +84,8 @@ class FakeMarzban:
         self._enter("create_user", username, data_limit, expire)
         if self.delay:
             await asyncio.sleep(self.delay)
+        if username in self.users:
+            raise http_error(409)  # как настоящий Marzban: пользователь уже существует
         self.users[username] = {
             "username": username,
             "status": "active",

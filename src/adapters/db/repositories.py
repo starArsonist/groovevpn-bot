@@ -82,3 +82,9 @@ class VPNProfileRepository(BaseRepository[VPNProfile]):
             select(VPNProfile).filter(VPNProfile.user_id == user_id, VPNProfile.status == "active")
         )
         return result.scalars().first()
+
+    async def get_by_marzban_username(self, marzban_username: str) -> Optional[VPNProfile]:
+        result = await self.session.execute(
+            select(VPNProfile).filter(VPNProfile.marzban_username == marzban_username)
+        )
+        return result.scalars().first()

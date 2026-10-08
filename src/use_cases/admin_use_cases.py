@@ -1,5 +1,6 @@
 import asyncio
 import html
+import re
 from datetime import datetime, timedelta, timezone
 import httpx
 from telegram import InlineKeyboardMarkup
@@ -72,7 +73,16 @@ class AdminUseCases:
                         raise
                     logger.warning(f"Marzban user {profile.marzban_username} not found. Falling back to new purchase flow.")
                     await self.vpn_profile_repo.update(profile.id, status="disabled")
-                    order = await self.order_repo.update(order.id, order_type="new")
+                    # План продления (перенос остатка) к новому пользователю не относится
+                    order = await self.order_repo.update(
+                        order.id,
+                        order_type="new",
+                        plan_computed=False,
+                        planned_data_limit=None,
+                        planned_expire_at=None,
+                        carried_over_bytes=None,
+                        reset_applied=False,
+                    )
 
             return await self._apply_new_purchase(order, user, purchased_bytes)
 
@@ -141,37 +151,76 @@ class AdminUseCases:
     async def _apply_new_purchase(self, order: Order, user: User, purchased_bytes: int) -> bool:
         marzban_username = f"user_{order.user_id}_{order.id}"
 
-        # Fetch inbounds
+        existing_profile = await self.vpn_profile_repo.get_by_marzban_username(marzban_username)
+        if existing_profile is not None and existing_profile.user_id != order.user_id:
+            logger.error(f"Order {order.id}: Marzban name {marzban_username} belongs to a profile of another user")
+            return False
+
+        # План (лимит и срок) считается один раз и сохраняется до первого вызова
+        # Marzban, как и в продлении: повтор после сбоя берёт его из БД.
+        if not order.plan_computed:
+            order = await self.order_repo.update(
+                order.id,
+                plan_computed=True,
+                planned_data_limit=purchased_bytes,
+                planned_expire_at=int((purchase_time_now() + timedelta(days=RENEWAL_WINDOW_DAYS)).timestamp()),
+                carried_over_bytes=0,
+            )
+
         inbounds_dict = build_inbounds_payload(await self.marzban_client.get_inbounds())
 
-        expire_at = int((purchase_time_now() + timedelta(days=RENEWAL_WINDOW_DAYS)).timestamp())
-
-        # Create user in Marzban
-        marzban_user = await self.marzban_client.create_user(
-            username=marzban_username,
-            data_limit=purchased_bytes,
-            expire=expire_at,
-            inbounds=inbounds_dict
-        )
+        try:
+            marzban_user = await self.marzban_client.create_user(
+                username=marzban_username,
+                data_limit=order.planned_data_limit,
+                expire=order.planned_expire_at,
+                inbounds=inbounds_dict
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 409:
+                raise
+            marzban_user = await self._adopt_existing_marzban_user(order, marzban_username)
 
         sub_url = marzban_user.get("subscription_url", "")
 
-        # Save VPNProfile in DB
-        await self.vpn_profile_repo.create(
-            user_id=order.user_id,
-            marzban_username=marzban_username,
-            sub_url=sub_url,
-            status="active"
-        )
+        if existing_profile is None:
+            await self.vpn_profile_repo.create(
+                user_id=order.user_id,
+                marzban_username=marzban_username,
+                sub_url=sub_url,
+                status="active"
+            )
+        else:
+            await self.vpn_profile_repo.update(existing_profile.id, sub_url=sub_url, status="active")
 
         # Update order status
         await self._mark_trial_converted(user.id)
         await self.order_repo.update(order.id, status="completed")
 
         # Notify user
-        await self._notify_first_issue(user.id, sub_url, self._format_expire(expire_at))
+        await self._notify_first_issue(user.id, sub_url, self._format_expire(order.planned_expire_at))
 
         return True
+
+    async def _adopt_existing_marzban_user(self, order: Order, marzban_username: str) -> dict:
+        """409 на создании: прошлая попытка уже создала пользователя. Переиспользуем его,
+        только если имя соответствует нашей схеме для этого telegram_id, и применяем сохранённый план."""
+        if not self._is_own_marzban_username(marzban_username, order.user_id):
+            raise RuntimeError(f"Marzban user {marzban_username} does not belong to user {order.user_id}")
+        logger.warning(f"Marzban user {marzban_username} already exists (retry of order {order.id}); applying saved plan")
+        marzban_user = await self.marzban_client.get_user(marzban_username)
+        await self.marzban_client.update_user(
+            marzban_username,
+            data_limit=order.planned_data_limit,
+            expire=order.planned_expire_at,
+            status="active",
+        )
+        return marzban_user
+
+    @staticmethod
+    def _is_own_marzban_username(marzban_username: str, user_id: int) -> bool:
+        match = re.fullmatch(r"user_(\d+)_(\d+)", marzban_username)
+        return match is not None and int(match.group(1)) == user_id
 
     async def _notify_first_issue(self, user_id: int, sub_url: str, expire_str: str) -> None:
         """Сообщение с первой выдачей ссылки. Кнопки подключения - только здесь (не при продлении)."""
