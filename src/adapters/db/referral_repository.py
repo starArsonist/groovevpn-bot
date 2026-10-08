@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import DateTime, exists, func, insert, literal, select, update
+from sqlalchemy import DateTime, exists, func, insert, literal, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.adapters.db.transactions import run_in_transaction
-from src.domain.models import Order, Referral, ReferralLink, ReferralStatus, User
+from src.domain.models import Order, OrderPayment, Referral, ReferralLink, ReferralStatus, User
 
 
 @dataclass(frozen=True)
@@ -22,12 +22,35 @@ async def ensure_user(session: AsyncSession, user_id: int, username: str | None)
         await session.flush()
 
 
+async def user_has_cash_paid_order(session: AsyncSession, user_id: int) -> bool:
+    """Есть ли подтверждённый заказ с оплатой деньгами: право приглашать.
+
+    Заказ без записи об оплате создан до релиза фичи и оплачен деньгами; заказ, оплаченный
+    балансом целиком (cash_rub = 0), не считается. Право монотонно: подтверждённый заказ не откатывается.
+    """
+    result = await session.execute(
+        select(Order.id)
+        .outerjoin(OrderPayment, OrderPayment.order_id == Order.id)
+        .where(
+            Order.user_id == user_id,
+            Order.status == "completed",
+            or_(OrderPayment.order_id.is_(None), OrderPayment.cash_rub > 0),
+        )
+        .limit(1)
+    )
+    return result.first() is not None
+
+
 class ReferralRepository:
     """Ссылки, привязки и флаги уведомлений. Каждая операция - короткая транзакция на своей сессии;
     состязательные условия (лимит ссылок, «сжигание», заявка на бонус) выражены условными SQL-операторами."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
+
+    async def has_cash_paid_order(self, user_id: int) -> bool:
+        async with self._session_factory() as session:
+            return await user_has_cash_paid_order(session, user_id)
 
     # ---------- ссылки ----------
 

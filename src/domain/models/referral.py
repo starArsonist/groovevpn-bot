@@ -27,6 +27,7 @@ class CloseReason:
     MONTHLY_CAP = "monthly_cap"
     NO_REWARD = "no_reward"  # награда округлилась до нуля
     NOT_ELIGIBLE = "not_eligible"  # первый заказ без заявки (фича была выключена)
+    INVITER_NOT_PAID = "inviter_not_paid"  # у пригласившего нет подтверждённого заказа с оплатой деньгами
 
 
 class BalanceKind:

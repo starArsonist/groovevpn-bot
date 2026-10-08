@@ -51,6 +51,13 @@ def _plain(entries):
     return [(e.id, e.user_id, e.kind, e.amount_rub, e.ref_id) for e in entries]
 
 
+@pytest.fixture
+async def inviter_can_invite(renv):
+    """Пригласивший уже платил деньгами (право приглашать); отдельные тесты проверяют и обратное."""
+    await renv.make_eligible(INVITER)
+
+
+
 def _buttons(markup):
     return [b for row in markup.inline_keyboard for b in row]
 
@@ -203,7 +210,7 @@ async def test_start_with_link_while_disabled_binds_nobody(env, shared_session):
 
 # ---------- экран «Пригласить друга» ----------
 
-async def test_invite_screen_shows_link_in_code_and_never_a_share_button(renv):
+async def test_invite_screen_shows_link_in_code_and_never_a_share_button(renv, inviter_can_invite):
     await renv.add_balance(INVITER, 39)
     update, edit = _callback_update(INVITER, REF_MENU)
 
@@ -222,7 +229,7 @@ async def test_invite_screen_shows_link_in_code_and_never_a_share_button(renv):
     assert any(c.startswith(REF_REVOKE_PREFIX) for c in _callbacks(markup))
 
 
-async def test_invite_screen_new_link_revoke_and_limit(renv):
+async def test_invite_screen_new_link_revoke_and_limit(renv, inviter_can_invite):
     ctx = _context(renv)
     update, edit = _callback_update(INVITER, REF_MENU)
     await referral_menu_handler(update, ctx)
@@ -242,7 +249,7 @@ async def test_invite_screen_new_link_revoke_and_limit(renv):
     assert REF_NEW in _callbacks(edit.call_args.kwargs["reply_markup"])
 
 
-async def test_invite_screen_when_disabled_and_when_bot_name_unknown(env, shared_session):
+async def test_invite_screen_when_disabled_and_when_bot_name_unknown(env, shared_session, inviter_can_invite):
     off = build_ref_env(env, shared_session, ReferralConfig(enabled=False))
     update, edit = _callback_update(INVITER, REF_MENU)
     await referral_menu_handler(update, _context(off))

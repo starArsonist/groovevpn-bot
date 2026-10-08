@@ -1,3 +1,4 @@
+import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -10,6 +11,13 @@ from tests.referral_fakes import BOT_NAME, CaptureLogs
 
 INVITER = 10
 FRIEND = 50
+
+
+@pytest.fixture(autouse=True)
+async def _inviter_can_invite(renv):
+    """Пригласивший уже платил деньгами (право приглашать); отдельные тесты проверяют и обратное."""
+    await renv.make_eligible(INVITER)
+
 
 
 def _assert_no_secrets(logs: CaptureLogs, *tokens: str) -> None:

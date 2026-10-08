@@ -12,6 +12,13 @@ from tests.referral_fakes import BOT_NAME, CaptureLogs, build_ref_env
 INVITER = 10
 
 
+@pytest.fixture(autouse=True)
+async def _inviter_can_invite(renv):
+    """Пригласивший уже платил деньгами (право приглашать); отдельные тесты проверяют и обратное."""
+    await renv.make_eligible(INVITER)
+
+
+
 async def _link_count(renv) -> int:
     async with renv.session_factory() as session:
         return (await session.execute(select(func.count()).select_from(ReferralLink))).scalar_one()

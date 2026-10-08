@@ -126,7 +126,25 @@ class RefEnv:
 
     # ---------- помощники для тестов ----------
 
+    async def make_eligible(self, user_id: int, cash_rub: int = 130) -> None:
+        """Подтверждённый заказ с оплатой деньгами (право приглашать); `cash_rub=0` - заказ, оплаченный балансом."""
+        async with self.session_factory() as session:
+            await UserRepository(session).get_or_create(user_id=user_id, username=None)
+            order = Order(user_id=user_id, tariff_gb=50, order_type="new", status="completed", photo_file_id="photo")
+            session.add(order)
+            await session.flush()
+            session.add(
+                OrderPayment(
+                    order_id=order.id, price_rub=130, balance_rub=130 - cash_rub, cash_rub=cash_rub,
+                    bonus_bytes=0, created_at=self.clock(),
+                )
+            )
+            await session.commit()
+
     async def make_link(self, inviter: int) -> ReferralLink:
+        """Ссылка пригласившего; ему автоматически выдаётся право приглашать (платная покупка)."""
+        if not await self.referrals.has_cash_paid_order(inviter):
+            await self.make_eligible(inviter)
         overview = await self.links.create(inviter, f"user{inviter}")
         assert overview.new_link is not None
         return overview.new_link

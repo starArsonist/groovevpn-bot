@@ -29,7 +29,7 @@
 | inviter_id | BIGINT NOT NULL FK users.id | |
 | invitee_id | BIGINT NOT NULL FK users.id **UNIQUE** | один раз навсегда |
 | status | VARCHAR NOT NULL default `bound` | `bound` -> `rewarded` \| `closed` |
-| close_reason | VARCHAR NULL | `no_cash`, `monthly_cap`, `no_reward`, `not_eligible` |
+| close_reason | VARCHAR NULL | `no_cash`, `monthly_cap`, `no_reward`, `not_eligible`, `inviter_not_paid` |
 | bound_at | DATETIME NOT NULL | |
 | bonus_order_id | INTEGER NULL FK orders.id | заявка (claim) заказа на бонус и награду |
 | reward_rub | INTEGER NULL | начисленная награда |
@@ -72,6 +72,17 @@ Append-only журнал. Записи не обновляются и не уд�
 | created_at | DATETIME NOT NULL | |
 
 `CHECK (balance_rub >= 0 AND cash_rub >= 0 AND balance_rub + cash_rub = price_rub)`.
+
+## Право приглашать (без новых колонок)
+
+Пользователь «может приглашать», если существует заказ `completed`, у которого нет строки в `order_payments` (создан до релиза фичи) либо `cash_rub > 0`:
+
+```sql
+SELECT 1 FROM orders o LEFT JOIN order_payments p ON p.order_id = o.id
+WHERE o.user_id = :user AND o.status = 'completed' AND (p.order_id IS NULL OR p.cash_rub > 0) LIMIT 1;
+```
+
+Проверяется при показе/создании ссылки и в транзакции завершения заказа приглашённого (перед записью награды).
 
 ## Ключевые атомарные операторы
 

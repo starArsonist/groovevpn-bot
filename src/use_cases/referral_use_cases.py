@@ -62,6 +62,7 @@ class OverviewStatus(StrEnum):
     OK = "ok"
     DISABLED = "disabled"
     UNAVAILABLE = "unavailable"  # имя бота неизвестно: ссылку собрать нельзя
+    NOT_ELIGIBLE = "not_eligible"  # нет подтверждённого заказа с оплатой деньгами: приглашать нельзя
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,8 @@ class ReferralLinkUseCase:
         if not self.config.enabled:
             return ReferralOverview(OverviewStatus.DISABLED)
         async with self._lock(user_id):
+            if not await self.referral_repo.has_cash_paid_order(user_id):
+                return ReferralOverview(OverviewStatus.NOT_ELIGIBLE)
             created: ReferralLink | None = None
             if not await self.referral_repo.list_active_links(user_id):
                 created = await self._create(user_id, username)
@@ -119,11 +122,15 @@ class ReferralLinkUseCase:
         if not self.config.enabled:
             return ReferralOverview(OverviewStatus.DISABLED)
         async with self._lock(user_id):
+            if not await self.referral_repo.has_cash_paid_order(user_id):
+                return ReferralOverview(OverviewStatus.NOT_ELIGIBLE)
             created = await self._create(user_id, username)
             return await self._overview(user_id, created)
 
     async def revoke(self, user_id: int, link_id: int) -> ReferralOverview:
         async with self._lock(user_id):
+            if not await self.referral_repo.has_cash_paid_order(user_id):
+                return ReferralOverview(OverviewStatus.NOT_ELIGIBLE)
             if await self.referral_repo.revoke_link(user_id, link_id, self._clock()):
                 logger.info(f"Referral link {link_id} revoked by user {user_id}")
             return await self._overview(user_id, None)

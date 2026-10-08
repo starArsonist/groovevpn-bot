@@ -32,3 +32,13 @@
 - [ ] **B11** Интеграция в `AdminUseCases` (бонус в план, транзакционное завершение, reject/cancel, охрана «нет цены») и `CreateOrderUseCase`.
 - [ ] **B12** Telegram-слой: start, referral, payment, cancel, subscription, admin card/`/balance`, notifier, `main.py`.
 - [ ] **B13** README, прогон всех тестов, отчёт.
+
+## Phase C: изменение правил - приглашать могут платившие деньгами (2026-10-08)
+
+Порядок: спецификация -> план -> тесты -> код (спека и план обновлены).
+
+- [x] **C1** Тесты `tests/test_referral_eligibility.py` (первыми, должны падать) + адаптация `tests/referral_fakes.py` и существующих тестов (инвайтер получает право через `make_eligible`).
+- [x] **C2** `CloseReason.INVITER_NOT_PAID`, `has_cash_paid_order` (репозиторий + функция для транзакций).
+- [x] **C3** `ReferralLinkUseCase`: статус `NOT_ELIGIBLE`; `render_overview`: нейтральный экран.
+- [x] **C4** `OrderSettlement.complete`: проверка пригласившего перед наградой.
+- [x] **C5** Полный прогон, обновить quickstart.

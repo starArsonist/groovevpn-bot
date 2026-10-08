@@ -6,7 +6,7 @@ from loguru import logger
 from sqlalchemy import DateTime, func, insert, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.adapters.db.referral_repository import ensure_user
+from src.adapters.db.referral_repository import ensure_user, user_has_cash_paid_order
 from src.adapters.db.transactions import run_in_transaction
 from src.domain.models import (
     BalanceEntry,
@@ -275,6 +275,12 @@ class OrderSettlement:
 
             if referral.bonus_order_id != order_id:
                 return CompletionResult(completed=True)  # заявка у другого ожидающего заказа
+
+            if not await user_has_cash_paid_order(session, referral.inviter_id):
+                # Награда только тому, кто сам платил деньгами; приглашённый свой бонус ГБ уже получил
+                await self._close(session, referral.id, CloseReason.INVITER_NOT_PAID, now)
+                logger.info(f"Referral {referral.id} closed: inviter {referral.inviter_id} has no cash-paid order")
+                return CompletionResult(completed=True, closed_reason=CloseReason.INVITER_NOT_PAID)
 
             reward = calculate_reward(payment.cash_rub if payment is not None else 0, config.reward_percent)
             if reward <= 0:

@@ -13,6 +13,7 @@ REF_NEW = "ref_new"
 REF_REVOKE_PREFIX = "ref_revoke_"
 
 INVITE_BUTTON_TEXT = "Пригласить друга"
+NOT_ELIGIBLE_TEXT = "Приглашения доступны после первой покупки."
 
 
 def invite_button() -> InlineKeyboardButton:
@@ -24,6 +25,9 @@ def render_overview(overview: ReferralOverview, config: ReferralConfig) -> tuple
 
     if overview.status == OverviewStatus.DISABLED:
         return "Приглашения сейчас недоступны.", InlineKeyboardMarkup([back_row, [support_button()]])
+    if overview.status == OverviewStatus.NOT_ELIGIBLE:
+        buy_row = [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")]
+        return NOT_ELIGIBLE_TEXT, InlineKeyboardMarkup([buy_row, back_row, [support_button()]])
     if overview.status == OverviewStatus.UNAVAILABLE:
         return (
             "Не удалось получить ссылку. Попробуйте позже.",
