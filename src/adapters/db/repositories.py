@@ -59,6 +59,14 @@ class OrderRepository(BaseRepository[Order]):
         )
         return result.scalars().first()
 
+    async def transition_status(self, order_id: int, from_status: str, to_status: str) -> bool:
+        """Условный переход статуса. True - переход выполнен именно этим вызовом."""
+        result = await self.session.execute(
+            update(Order).where(Order.id == order_id, Order.status == from_status).values(status=to_status)
+        )
+        await self.session.commit()
+        return result.rowcount == 1
+
     async def get_pending_by_user(self, user_id: int) -> List[Order]:
         result = await self.session.execute(
             select(Order).filter(Order.user_id == user_id, Order.status == "pending")

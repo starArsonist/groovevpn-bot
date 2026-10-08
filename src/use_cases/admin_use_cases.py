@@ -246,12 +246,17 @@ class AdminUseCases:
         return datetime.fromtimestamp(expire_at, tz=timezone.utc).strftime("%d.%m.%Y")
 
     async def reject_order(self, order_id: int) -> bool:
+        async with self._lock_for(order_id):
+            return await self._reject_order_locked(order_id)
+
+    async def _reject_order_locked(self, order_id: int) -> bool:
         logger.info(f"Rejecting order {order_id}")
         order = await self.order_repo.get_fresh(order_id)
         if not order or order.status != "pending":
             return False
 
-        await self.order_repo.update(order.id, status="rejected")
+        if not await self.order_repo.transition_status(order.id, "pending", "rejected"):
+            return False
 
         # Notify user
         reject_msg = (
