@@ -35,6 +35,21 @@ def _format_expire(expire_at: int | None) -> str:
     return f"{date_str} (срок истёк)"
 
 
+async def _balance_line(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> str:
+    """Строка с бонусным балансом (только если он положителен); сбой чтения баланса экран не ломает."""
+    balance_repo = context.bot_data.get("balance_repo")
+    if balance_repo is None:
+        return ""
+    try:
+        balance = await balance_repo.get_balance(user_id)
+    except Exception as exc:
+        logger.error(f"Failed to read the balance of user {user_id} ({type(exc).__name__})")
+        return ""
+    if balance <= 0:
+        return ""
+    return f"\n\nБаланс: <b>{balance} ₽</b> - можно потратить только на пакеты"
+
+
 async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -47,11 +62,13 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
     try:
         data = await traffic_uc.execute(user_id)
         connect_rows: list[list[InlineKeyboardButton]] = []
+        balance_line = await _balance_line(context, user_id)
 
         if not data:
             text = (
                 "У вас нет активной подписки.\n"
                 "Чтобы приобрести доступ, нажмите «Купить VPN»."
+                f"{balance_line}"
             )
             keyboard = [
                 [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")],
@@ -79,6 +96,7 @@ async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_
                 f"Действует до:  <b>{_format_expire(data['expire_at'])}</b>\n\n"
                 "Ссылка для подключения:\n"
                 f"<code>{html.escape(data['sub_url'] or '')}</code>"
+                f"{balance_line}"
             )
             connect_keyboard = context.bot_data.get("connect_keyboard")
             connect_rows = connect_keyboard.app_rows(data["sub_url"], "subscription") if connect_keyboard else []

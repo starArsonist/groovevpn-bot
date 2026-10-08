@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import src.domain.models  # noqa: F401  (регистрирует все модели в metadata)
 from src.domain.base import Base
 from tests.fakes import TrialEnv, build_env
+from tests.referral_fakes import RefEnv, build_ref_env
 
 
 @pytest.fixture
@@ -21,3 +22,15 @@ async def session_factory(tmp_path):
 @pytest.fixture
 async def env(session_factory) -> TrialEnv:
     return build_env(session_factory)
+
+
+@pytest.fixture
+async def shared_session(session_factory):
+    # Как в main.py: у AdminUseCases одна общая сессия
+    async with session_factory() as session:
+        yield session
+
+
+@pytest.fixture
+async def renv(env, shared_session) -> RefEnv:
+    return build_ref_env(env, shared_session)
