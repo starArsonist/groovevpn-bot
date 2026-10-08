@@ -50,7 +50,7 @@ class AdminUseCases:
 
     async def _approve_order_locked(self, order_id: int) -> bool:
         logger.info(f"Approving order {order_id}")
-        order: Order = await self.order_repo.get_by_id(order_id)
+        order: Order = await self.order_repo.get_fresh(order_id)
         if not order or order.status != "pending":
             logger.warning(f"Order {order_id} not found or not pending")
             return False
@@ -247,7 +247,7 @@ class AdminUseCases:
 
     async def reject_order(self, order_id: int) -> bool:
         logger.info(f"Rejecting order {order_id}")
-        order = await self.order_repo.get_by_id(order_id)
+        order = await self.order_repo.get_fresh(order_id)
         if not order or order.status != "pending":
             return False
 

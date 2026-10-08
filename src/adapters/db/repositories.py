@@ -48,6 +48,17 @@ class OrderRepository(BaseRepository[Order]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Order)
 
+    async def get_fresh(self, id: int) -> Optional[Order]:
+        """Читает заказ из БД, перезаписывая объект в кэше общей сессии.
+
+        Статус и план заказа могут измениться другой сессией (транзакции с балансом,
+        другой экземпляр), а обычный `get_by_id` отдал бы устаревший кэшированный объект.
+        """
+        result = await self.session.execute(
+            select(Order).filter(Order.id == id).execution_options(populate_existing=True)
+        )
+        return result.scalars().first()
+
     async def get_pending_by_user(self, user_id: int) -> List[Order]:
         result = await self.session.execute(
             select(Order).filter(Order.user_id == user_id, Order.status == "pending")
