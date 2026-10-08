@@ -42,6 +42,15 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
     photo_file_id = update.message.photo[-1].file_id
     tariff_gb = context.user_data.get('selected_tariff', 0)
 
+    if get_tariff(tariff_gb) is None:
+        logger.warning(f"Receipt photo from user {user.id} without a known tariff ({tariff_gb}GB): order not created")
+        context.user_data.pop('selected_tariff', None)
+        await update.message.reply_text(
+            "Пакет не выбран. Нажмите «Купить VPN» и выберите пакет.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")]]),
+        )
+        return ConversationHandler.END
+
     logger.info(f"Received receipt photo from user {user.id} for tariff {tariff_gb}GB")
 
     # Use Case injection
