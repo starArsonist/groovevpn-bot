@@ -91,7 +91,7 @@ class TrialMonitorUseCase:
         try:
             users = await self.marzban_client.get_users([t.marzban_username for t in active])
         except Exception as exc:
-            logger.error(f"Failed to fetch trial usage from Marzban: {exc}")
+            logger.error(f"Failed to fetch trial usage from Marzban: {type(exc).__name__}: {exc}")
             return {}
         return {u["username"]: u for u in users if "username" in u}
 

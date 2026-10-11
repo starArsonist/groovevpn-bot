@@ -101,7 +101,7 @@ class AdminUseCases:
             return await self._apply_new_purchase(order, user, purchased_bytes)
 
         except Exception as e:
-            logger.error(f"Error approving order {order_id}: {e}")
+            logger.error(f"Error approving order {order_id}: {type(e).__name__}: {e}")
             return False
 
     async def _apply_topup(self, order: Order, user: User, profile: VPNProfile, purchased_bytes: int) -> bool:
