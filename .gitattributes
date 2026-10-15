@@ -1,0 +1,8 @@
+# Не учитывать служебные файлы Spec Kit и документацию в статистике языков GitHub
+.specify/**   linguist-vendored
+.agent/**     linguist-vendored
+*.ps1         linguist-vendored
+docs/**       linguist-documentation
+specs/**      linguist-documentation
+*.html        linguist-detectable=false
+* text=auto eol=lf

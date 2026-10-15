@@ -4,9 +4,17 @@ import httpx
 from src.config import settings
 from loguru import logger
 
+USERS_BATCH_SIZE = 50
+
+# Стандартный таймаут httpx - 5 секунд; панель на удалённом сервере (особенно логин)
+# иногда отвечает дольше, и операция падала с пустой ошибкой ConnectTimeout/ReadTimeout.
+DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
 class MarzbanClient:
-    def __init__(self, base_url: str, username: str, password: str):
+    def __init__(self, base_url: str, username: str, password: str, timeout: httpx.Timeout = DEFAULT_TIMEOUT):
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
         self.username = username
         self.password = password
         self._access_token: Optional[str] = None
@@ -18,7 +26,7 @@ class MarzbanClient:
             return self._access_token
 
         logger.info("Requesting new Marzban API token")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/api/admin/token",
                 data={
@@ -40,7 +48,7 @@ class MarzbanClient:
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             url = f"{self.base_url}{endpoint}"
             response = await client.request(method, url, headers=headers, **kwargs)
             response.raise_for_status()
@@ -90,6 +98,18 @@ class MarzbanClient:
             payload["status"] = status
         logger.info(f"Updating Marzban user {username} with: {payload}")
         return await self._request("PUT", f"/api/user/{username}", json=payload)
+
+    async def get_users(self, usernames: list[str]) -> list[Dict[str, Any]]:
+        """Batch-запрос пользователей по списку имён (GET /api/users, порциями)."""
+        users: list[Dict[str, Any]] = []
+        for start in range(0, len(usernames), USERS_BATCH_SIZE):
+            chunk = usernames[start:start + USERS_BATCH_SIZE]
+            logger.info(f"Fetching {len(chunk)} Marzban users in one batch")
+            data = await self._request(
+                "GET", "/api/users", params={"username": chunk, "limit": len(chunk)}
+            )
+            users.extend(data.get("users", []))
+        return users
 
     async def reset_user_data_usage(self, username: str) -> Dict[str, Any]:
         """Reset a user's used_traffic counter to zero."""

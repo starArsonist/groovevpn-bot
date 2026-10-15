@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Добавление подписки</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1a1d21;
+    --muted: #5d6673;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d9dde3;
+    --error: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101216;
+      --card: #1a1d23;
+      --text: #eceef1;
+      --muted: #9aa3af;
+      --accent: #3b82f6;
+      --accent-text: #ffffff;
+      --border: #2c313a;
+      --error: #f97066;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  main {
+    width: 100%;
+    max-width: 440px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 20px;
+  }
+  h1 { margin: 0 0 8px; font-size: 20px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .btn {
+    display: block;
+    width: 100%;
+    margin: 0 0 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.primary {
+    padding: 18px 16px;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 18px;
+  }
+  code {
+    display: block;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+    user-select: all;
+  }
+  .error { color: var(--error); }
+  a.link { color: var(--accent); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Добавление подписки</h1>
+
+  <div id="actions" hidden>
+    <p id="lead"></p>
+    <a id="open" class="btn primary" href="#">Открыть</a>
+    <button id="copy" class="btn" type="button">Скопировать ссылку подписки</button>
+    <p id="status" class="muted" role="status"></p>
+    <code id="subtext"></code>
+    <p class="muted">Если приложение не открылось, установите его и нажмите кнопку ещё раз. Если страница открыта внутри Telegram, откройте её в браузере через меню ⋯</p>
+    <p id="download" class="muted"></p>
+  </div>
+
+  <div id="error" hidden>
+    <p class="error">Ссылка недействительна или устарела.</p>
+    <p class="muted">Вернитесь в бот и откройте её заново.</p>
+  </div>
+
+  <noscript><p class="error">Для работы страницы нужен JavaScript.</p></noscript>
+</main>
+
+<script>
+'use strict';
+
+const ALLOWED_SUB_HOSTS = ['panel.groovevpn.online'];
+const PROFILE_NAME = 'groove dealers';
+const OPEN_DELAY_MS = 700;
+
+/* LOGIC:BEGIN */
+const APPS = Object.freeze({
+  happ: Object.freeze({
+    title: 'Happ',
+    build: function (sub) { return 'happ://add/' + sub; },
+    download: 'https://www.happ.su/main'
+  }),
+  v2raytun: Object.freeze({
+    title: 'V2RayTun',
+    build: function (sub) { return 'v2raytun://import/' + sub; },
+    download: null
+  }),
+  hiddify: Object.freeze({
+    title: 'Hiddify',
+    build: function (sub, name) { return 'hiddify://import/' + sub + '#' + encodeURIComponent(name); },
+    download: 'https://hiddify.com/app/'
+  })
+});
+
+const ALLOWED_SCHEMES = ['happ://', 'v2raytun://', 'hiddify://'];
+const MAX_SUB_LENGTH = 2048;
+
+function parseFragment(hash) {
+  const raw = typeof hash === 'string' && hash.charAt(0) === '#' ? hash.slice(1) : '';
+  const params = new URLSearchParams(raw);
+  return { app: params.get('app'), sub: params.get('sub') };
+}
+
+function validate(params, allowedHosts) {
+  const fail = { ok: false };
+  if (!params || typeof params.app !== 'string' || typeof params.sub !== 'string') return fail;
+  if (!Object.prototype.hasOwnProperty.call(APPS, params.app)) return fail;
+  if (!Array.isArray(allowedHosts) || allowedHosts.length === 0) return fail;
+
+  const sub = params.sub;
+  if (sub.length === 0 || sub.length > MAX_SUB_LENGTH) return fail;
+  if (/[\x00-\x20\x7f-\x9f]/.test(sub)) return fail;
+
+  let url;
+  try {
+    url = new URL(sub);
+  } catch (e) {
+    return fail;
+  }
+  if (url.protocol !== 'https:') return fail;
+  if (url.username !== '' || url.password !== '') return fail;
+  if (url.hash !== '' || sub.indexOf('#') !== -1) return fail;
+
+  const hosts = allowedHosts.map(function (h) { return String(h).toLowerCase(); });
+  if (hosts.indexOf(url.hostname.toLowerCase()) === -1) return fail;
+
+  return { ok: true, app: params.app, sub: url.href };
+}
+
+function isAllowedDeeplink(link) {
+  return typeof link === 'string' && ALLOWED_SCHEMES.some(function (prefix) {
+    return link.indexOf(prefix) === 0;
+  });
+}
+
+function buildDeeplink(app, sub, profileName) {
+  if (!Object.prototype.hasOwnProperty.call(APPS, app)) return null;
+  const link = APPS[app].build(sub, profileName);
+  return isAllowedDeeplink(link) ? link : null;
+}
+
+function resolve(hash, allowedHosts, profileName) {
+  const checked = validate(parseFragment(hash), allowedHosts);
+  if (!checked.ok) return { ok: false };
+  const deeplink = buildDeeplink(checked.app, checked.sub, profileName);
+  if (deeplink === null) return { ok: false };
+  return { ok: true, app: checked.app, sub: checked.sub, deeplink: deeplink };
+}
+/* LOGIC:END */
+
+function fallbackCopy(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.top = '0';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch (e) {
+    copied = false;
+  }
+  document.body.removeChild(area);
+  return copied;
+}
+
+function copyText(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    return navigator.clipboard.writeText(text).then(
+      function () { return true; },
+      function () { return fallbackCopy(text); }
+    );
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+
+(function main() {
+  const byId = function (id) { return document.getElementById(id); };
+  const result = resolve(window.location.hash, ALLOWED_SUB_HOSTS, PROFILE_NAME);
+
+  if (!result.ok) {
+    byId('error').hidden = false;
+    return;
+  }
+
+  const app = APPS[result.app];
+  byId('lead').textContent = 'Подписка будет добавлена в приложение ' + app.title + '.';
+
+  const openLink = byId('open');
+  openLink.setAttribute('href', result.deeplink);
+  openLink.textContent = 'Открыть в ' + app.title;
+
+  byId('subtext').textContent = result.sub;
+
+  byId('copy').addEventListener('click', function () {
+    copyText(result.sub).then(function (copied) {
+      byId('status').textContent = copied
+        ? 'Ссылка подписки скопирована.'
+        : 'Не удалось скопировать. Выделите ссылку ниже и скопируйте вручную.';
+    });
+  });
+
+  if (app.download) {
+    const link = document.createElement('a');
+    link.className = 'link';
+    link.setAttribute('href', app.download);
+    link.setAttribute('rel', 'noopener noreferrer');
+    link.textContent = 'Где скачать ' + app.title;
+    byId('download').appendChild(link);
+  }
+
+  byId('actions').hidden = false;
+
+  window.setTimeout(function () {
+    if (isAllowedDeeplink(result.deeplink)) {
+      window.location.href = result.deeplink;
+    }
+  }, OPEN_DELAY_MS);
+})();
+</script>
+</body>
+</html>

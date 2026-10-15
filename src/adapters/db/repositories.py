@@ -48,6 +48,25 @@ class OrderRepository(BaseRepository[Order]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Order)
 
+    async def get_fresh(self, id: int) -> Optional[Order]:
+        """Читает заказ из БД, перезаписывая объект в кэше общей сессии.
+
+        Статус и план заказа могут измениться другой сессией (транзакции с балансом,
+        другой экземпляр), а обычный `get_by_id` отдал бы устаревший кэшированный объект.
+        """
+        result = await self.session.execute(
+            select(Order).filter(Order.id == id).execution_options(populate_existing=True)
+        )
+        return result.scalars().first()
+
+    async def transition_status(self, order_id: int, from_status: str, to_status: str) -> bool:
+        """Условный переход статуса. True - переход выполнен именно этим вызовом."""
+        result = await self.session.execute(
+            update(Order).where(Order.id == order_id, Order.status == from_status).values(status=to_status)
+        )
+        await self.session.commit()
+        return result.rowcount == 1
+
     async def get_pending_by_user(self, user_id: int) -> List[Order]:
         result = await self.session.execute(
             select(Order).filter(Order.user_id == user_id, Order.status == "pending")
@@ -61,5 +80,11 @@ class VPNProfileRepository(BaseRepository[VPNProfile]):
     async def get_by_user_id(self, user_id: int) -> Optional[VPNProfile]:
         result = await self.session.execute(
             select(VPNProfile).filter(VPNProfile.user_id == user_id, VPNProfile.status == "active")
+        )
+        return result.scalars().first()
+
+    async def get_by_marzban_username(self, marzban_username: str) -> Optional[VPNProfile]:
+        result = await self.session.execute(
+            select(VPNProfile).filter(VPNProfile.marzban_username == marzban_username)
         )
         return result.scalars().first()

@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from loguru import logger
 
@@ -7,17 +8,48 @@ from src.logger import setup_logger
 from src.adapters.db.session import engine, AsyncSessionLocal
 from src.domain.base import Base
 
+from src.adapters.db.balance_repository import BalanceRepository
+from src.adapters.db.order_settlement import OrderSettlement
+from src.adapters.db.referral_repository import ReferralRepository
 from src.adapters.db.repositories import UserRepository, OrderRepository, VPNProfileRepository
+from src.adapters.db.trial_repository import TrialRepository
 from src.adapters.marzban.client import marzban_client
+from src.adapters.scheduler import run_periodically
+from src.domain.referral_rules import ReferralConfig
+from src.domain.trial_rules import TrialConfig
 from src.use_cases.order_use_cases import CreateOrderUseCase
 from src.use_cases.admin_use_cases import AdminUseCases
 from src.use_cases.traffic_use_cases import CheckTrafficUseCase
+from src.use_cases.trial_use_cases import ActivateTrialUseCase, TrialOfferUseCase
+from src.use_cases.trial_monitor import TrialMonitorUseCase
+from src.use_cases.referral_use_cases import (
+    AcceptReferralUseCase,
+    BalanceOverviewUseCase,
+    BotUsernameProvider,
+    PaymentQuoteUseCase,
+    ReferralLinkUseCase,
+    RewardNotificationUseCase,
+)
 
 from src.adapters.tg_bot.handlers.start import start_handler
 from src.adapters.tg_bot.handlers.tariffs import tariffs_handler
-from src.adapters.tg_bot.handlers.payment import payment_conv_handler
-from src.adapters.tg_bot.handlers.admin import admin_decision_handler
+from src.adapters.tg_bot.handlers.payment import payment_conv_handler, cancel_order_handler, CANCEL_ORDER_PREFIX
+from src.adapters.tg_bot.handlers.referral import (
+    REF_MENU,
+    REF_NEW,
+    REF_REVOKE_PREFIX,
+    referral_menu_handler,
+    referral_new_handler,
+    referral_revoke_handler,
+)
+from src.adapters.tg_bot.handlers.admin import admin_decision_handler, balance_admin_handler
 from src.adapters.tg_bot.handlers.subscription import my_subscription_handler
+from src.adapters.tg_bot.handlers.trial import trial_start_handler, TRIAL_CALLBACK
+from src.adapters.tg_bot.notifier import TelegramReferralNotifier, TelegramTrialNotifier
+from src.adapters.tg_bot.connect import build_connect_keyboard
+
+TRIAL_CHECK_INTERVAL_SECONDS = 300
+REFERRAL_NOTIFY_INTERVAL_SECONDS = 300
 
 async def init_db():
     logger.info("Initializing database schema...")
@@ -55,19 +87,77 @@ async def main():
     order_repo = OrderRepository(session)
     vpn_repo = VPNProfileRepository(session)
     
-    create_order_uc = CreateOrderUseCase(order_repo, user_repo, vpn_repo)
-    admin_uc = AdminUseCases(order_repo, user_repo, vpn_repo, marzban_client, application.bot)
+    # Триал: репозиторий работает через фабрику сессий (короткие транзакции),
+    # потому что фоновая проверка идёт параллельно хендлерам.
+    trial_repo = TrialRepository(AsyncSessionLocal)
+    trial_config = TrialConfig(
+        enabled=settings.trial_enabled,
+        data_gb=settings.trial_data_gb,
+        days=settings.trial_days,
+        daily_cap=settings.trial_daily_cap,
+    )
+    activate_trial_uc = ActivateTrialUseCase(trial_repo, marzban_client, trial_config)
+    trial_offer_uc = TrialOfferUseCase(trial_repo, trial_config)
+    trial_monitor = TrialMonitorUseCase(
+        trial_repo, marzban_client, TelegramTrialNotifier(application.bot)
+    )
+
+    # Кнопки подключения в один тап (страница-прослойка); при пустой/невалидной
+    # конфигурации выключены, бот работает как раньше
+    connect_keyboard = build_connect_keyboard(settings.connect_page_url, settings.connect_apps)
+
+    # Реферальная система и бонусный баланс: репозитории на фабрике сессий (короткие
+    # атомарные транзакции), общая сессия для них не подходит
+    referral_config = ReferralConfig(
+        enabled=settings.referral_enabled,
+        invitee_bonus_gb=settings.referral_invitee_bonus_gb,
+        reward_percent=settings.referral_reward_percent,
+        max_active_links=settings.referral_max_active_links,
+        monthly_cap=settings.referral_monthly_cap,
+    )
+    referral_repo = ReferralRepository(AsyncSessionLocal)
+    balance_repo = BalanceRepository(AsyncSessionLocal)
+    settlement = OrderSettlement(AsyncSessionLocal)
+    username_provider = BotUsernameProvider(application.bot, settings.bot_username)
+    reward_notification_uc = RewardNotificationUseCase(
+        referral_repo, balance_repo, TelegramReferralNotifier(application.bot)
+    )
+
+    create_order_uc = CreateOrderUseCase(order_repo, user_repo, vpn_repo, settlement=settlement)
+    admin_uc = AdminUseCases(
+        order_repo, user_repo, vpn_repo, marzban_client, application.bot,
+        trial_repo=trial_repo, connect_keyboard=connect_keyboard,
+        payments=settlement, referral_config=referral_config, reward_notifier=reward_notification_uc,
+    )
     traffic_uc = CheckTrafficUseCase(vpn_repo, marzban_client)
     
     application.bot_data["create_order_uc"] = create_order_uc
     application.bot_data["admin_uc"] = admin_uc
     application.bot_data["traffic_uc"] = traffic_uc
+    application.bot_data["trial_repo"] = trial_repo
+    application.bot_data["connect_keyboard"] = connect_keyboard
+    application.bot_data["activate_trial_uc"] = activate_trial_uc
+    application.bot_data["trial_offer_uc"] = trial_offer_uc
+    application.bot_data["referral_config"] = referral_config
+    application.bot_data["referral_link_uc"] = ReferralLinkUseCase(
+        referral_repo, balance_repo, username_provider, referral_config
+    )
+    application.bot_data["accept_referral_uc"] = AcceptReferralUseCase(referral_repo, referral_config)
+    application.bot_data["quote_uc"] = PaymentQuoteUseCase(balance_repo, referral_repo, referral_config)
+    application.bot_data["balance_repo"] = balance_repo
+    application.bot_data["balance_overview_uc"] = BalanceOverviewUseCase(balance_repo)
 
     # Register Handlers
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CallbackQueryHandler(start_handler, pattern="^start$"))
     application.add_handler(CallbackQueryHandler(tariffs_handler, pattern="^buy_vpn$"))
     application.add_handler(CallbackQueryHandler(my_subscription_handler, pattern="^my_subscription$"))
+    application.add_handler(CallbackQueryHandler(trial_start_handler, pattern=f"^{TRIAL_CALLBACK}$"))
+    application.add_handler(CallbackQueryHandler(referral_menu_handler, pattern=f"^{REF_MENU}$"))
+    application.add_handler(CallbackQueryHandler(referral_new_handler, pattern=f"^{REF_NEW}$"))
+    application.add_handler(CallbackQueryHandler(referral_revoke_handler, pattern=f"^{REF_REVOKE_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(cancel_order_handler, pattern=f"^{CANCEL_ORDER_PREFIX}"))
+    application.add_handler(CommandHandler("balance", balance_admin_handler))
     
     # Admin handler
     application.add_handler(CallbackQueryHandler(admin_decision_handler, pattern="^(approve|reject)_"))
@@ -80,9 +170,25 @@ async def main():
     await application.start()
     await application.updater.start_polling()
     
+    # Фоновая пакетная проверка триалов (состояние и флаги уведомлений - в БД)
+    monitor_task = asyncio.create_task(
+        run_periodically("trial-monitor", TRIAL_CHECK_INTERVAL_SECONDS, trial_monitor.run_once)
+    )
+
+    # Досылка уведомлений пригласившим о начислении (флаги доставки - в БД)
+    referral_notify_task = asyncio.create_task(
+        run_periodically("referral-notifications", REFERRAL_NOTIFY_INTERVAL_SECONDS, reward_notification_uc.run_once)
+    )
+
     # Keep the bot running
     stop_event = asyncio.Event()
-    await stop_event.wait()
+    try:
+        await stop_event.wait()
+    finally:
+        for task in (monitor_task, referral_notify_task):
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 if __name__ == "__main__":
     try:

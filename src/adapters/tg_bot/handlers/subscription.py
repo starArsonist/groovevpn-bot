@@ -1,49 +1,130 @@
+import html
+from datetime import datetime, timezone
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from loguru import logger
 from src.use_cases.traffic_use_cases import CheckTrafficUseCase
+from src.adapters.tg_bot.connect import send_with_fallback
+from src.adapters.tg_bot.support import support_button
+
+STATUS_LABELS = {
+    "active": "🟢 Активна",
+    "limited": "🟠 Лимит трафика исчерпан",
+    "expired": "🔴 Истекла",
+    "disabled": "⚪ Отключена",
+    "on_hold": "🟡 На паузе",
+}
+
+PROGRESS_BAR_WIDTH = 10
+
+
+def _progress_bar(used_gb: float, limit_gb: float) -> str:
+    ratio = min(1.0, used_gb / limit_gb) if limit_gb else 0.0
+    filled = round(ratio * PROGRESS_BAR_WIDTH)
+    return "▰" * filled + "▱" * (PROGRESS_BAR_WIDTH - filled)
+
+
+def _format_expire(expire_at: int | None) -> str:
+    if not expire_at:
+        return "-"
+    expire_dt = datetime.fromtimestamp(expire_at, tz=timezone.utc)
+    days_left = (expire_dt - datetime.now(timezone.utc)).days
+    date_str = expire_dt.strftime("%d.%m.%Y")
+    if days_left > 0:
+        return f"{date_str} (осталось {days_left} дн.)"
+    return f"{date_str} (срок истёк)"
+
+
+async def _balance_line(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> str:
+    """Строка с бонусным балансом (только если он положителен); сбой чтения баланса экран не ломает."""
+    balance_repo = context.bot_data.get("balance_repo")
+    if balance_repo is None:
+        return ""
+    try:
+        balance = await balance_repo.get_balance(user_id)
+    except Exception as exc:
+        logger.error(f"Failed to read the balance of user {user_id} ({type(exc).__name__})")
+        return ""
+    if balance <= 0:
+        return ""
+    return f"\n\nБаланс: <b>{balance} ₽</b> - можно потратить только на пакеты"
+
 
 async def my_subscription_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    
+
     user_id = update.effective_user.id
     logger.info(f"User {user_id} requested subscription info")
-    
+
     traffic_uc: CheckTrafficUseCase = context.bot_data["traffic_uc"]
-    
+
     try:
         data = await traffic_uc.execute(user_id)
-        
+        connect_rows: list[list[InlineKeyboardButton]] = []
+        balance_line = await _balance_line(context, user_id)
+
         if not data:
             text = (
-                "У вас нет активной подписки VPN.\n"
-                "Чтобы приобрести доступ, нажмите 'Купить VPN'."
+                "У вас нет активной подписки.\n"
+                "Чтобы приобрести доступ, нажмите «Купить VPN»."
+                f"{balance_line}"
             )
             keyboard = [
                 [InlineKeyboardButton("Купить VPN", callback_data="buy_vpn")],
-                [InlineKeyboardButton("🔙 Назад", callback_data="start")]
+                [InlineKeyboardButton("🔙 Назад", callback_data="start")],
+                [support_button()],
             ]
         else:
+            status_label = STATUS_LABELS.get(data["status"], data["status"])
+
+            if data["is_unlimited"]:
+                usage_block = f"Использовано: <b>{data['used_gb']} ГБ</b> · Лимит: <b>безлимит</b>\n"
+            else:
+                bar = _progress_bar(data["used_gb"], data["limit_gb"])
+                usage_block = (
+                    f"<code>{bar}</code>\n\n"
+                    f"Использовано:  <b>{data['used_gb']} ГБ</b>\n"
+                    f"Осталось:      <b>{data['remaining_gb']} ГБ</b>\n"
+                    f"Лимит:         <b>{data['limit_gb']} ГБ</b>\n"
+                )
+
             text = (
-                "📊 **Информация о подписке**\n\n"
-                f"Использовано:  `{data['used_gb']} ГБ`\n"
-                f"Лимит:  `{data['limit_gb']} ГБ`\n"
-                f"Остаток:  `{data['remaining_gb']} ГБ`\n\n"
-                "Ваша ссылка (ключ) для подключения:\n"
-                f"`{data['sub_url']}`"
+                "<b>Ваша подписка</b>\n"
+                f"Статус: {status_label}\n\n"
+                f"{usage_block}"
+                f"Действует до:  <b>{_format_expire(data['expire_at'])}</b>\n\n"
+                "Ссылка для подключения:\n"
+                f"<code>{html.escape(data['sub_url'] or '')}</code>"
+                f"{balance_line}"
             )
+            connect_keyboard = context.bot_data.get("connect_keyboard")
+            connect_rows = connect_keyboard.app_rows(data["sub_url"], "subscription") if connect_keyboard else []
             keyboard = [
-                [InlineKeyboardButton("🔙 Назад", callback_data="start")]
+                [InlineKeyboardButton("Продлить / докупить", callback_data="buy_vpn")],
+                [InlineKeyboardButton("🔙 Назад", callback_data="start")],
+                [support_button()],
             ]
-            
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-        
+
+        async def deliver(message_text: str, markup: InlineKeyboardMarkup | None) -> None:
+            await query.message.edit_text(message_text, reply_markup=markup, parse_mode="HTML")
+
+        if connect_rows:
+            await send_with_fallback(
+                deliver,
+                (text, InlineKeyboardMarkup([*connect_rows, *keyboard])),
+                (text, InlineKeyboardMarkup(keyboard)),
+            )
+        else:
+            await deliver(text, InlineKeyboardMarkup(keyboard))
+
     except Exception as e:
         logger.error(f"Failed to fetch subscription for {user_id}: {e}")
-        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="start")]]
+        keyboard = [
+            [InlineKeyboardButton("🔙 Назад", callback_data="start")],
+            [support_button()],
+        ]
         await query.message.edit_text(
-            "Произошла ошибка при получении данных о подписке. Пожалуйста, попробуйте позже.", 
+            "Произошла ошибка при получении данных о подписке. Попробуйте позже.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
